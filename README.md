@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.269.0** · [Changelog](CHANGELOG.md)
+**Version 7.270.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -17,7 +17,7 @@ sudo -v
 ./ry-install.fish
 ```
 
-A run that reaches Preflight closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL`; the startup gates (hardware, root UUID, embedded values) and the lock stop earlier with `[ERR]` lines only — see [Exit Codes](#exit-codes).
+A run that reaches Preflight closes with the Totals line and a verdict: `PASS` or `PASS-WITH-WARNINGS` on exit `0`, otherwise `PREFLIGHT`, `FAIL`, or `FAIL-BOOT-CRITICAL`; the startup gates (root UUID, hardware, embedded values) and the lock stop earlier with `[ERR]` lines only — see [Exit Codes](#exit-codes).
 
 ## Requirements
 
@@ -57,7 +57,7 @@ Per-step results (one summary row each):
 | `0` | OK — success and `WARN`-only runs |
 | `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, a pipe closed by its reader, or stdout closed under fish 3) |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, or root misuse |
-| `3` | missing dependency; uncached sudo that no TTY prompt resolved, or a sudo credential tied to the parent process; a failed gate (hardware, root UUID, systemd, disk, network, pacman lock, ESP); a fish universal variable named like internal state; fish's `regex-easyesc` feature turned off; failed config validation; an unusable HOME, `~/ry-install` tree, or `/tmp` |
+| `3` | missing dependency; uncached sudo that no TTY prompt resolved, or a sudo credential tied to the parent process; a failed gate (root UUID, hardware, systemd, disk, ESP, pacman lock, network); a fish universal variable named like internal state; fish's `regex-easyesc` feature turned off; failed config validation; an unusable HOME, `~/ry-install` tree, or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
 | `5` | lock — another live instance holds the lock; a stale pidfile is reclaimed, an ambiguous one fails closed |
 
@@ -90,7 +90,7 @@ In deploy order; system files land `0644`, user files `0600`; `loader.conf` on t
 - `/etc/bluetooth/main.conf` — auto-power-on, `FastConnectable`, 3 reconnect attempts
 - `/etc/nftables.conf` — default-deny-inbound, IPv4 ping allowed, ICMPv6 base accept
 - `/etc/default/cpupower-service.conf` — governor (`powersave`)
-- `/etc/sysctl.d/95-ry-overrides.conf` — `fq` qdisc, TCP `bbr`, VM tunables
+- `/etc/sysctl.d/95-ry-overrides.conf` — NMI watchdog off, `fq` qdisc, TCP `bbr`, TCP and VM tunables
 - `/etc/udev/rules.d/99-ry-perf.rules` — NVMe scheduler `none`, P-State EPP, GPU DPM level `high`, `LIBINPUT_IGNORE_DEVICE` for the Xbox Wireless Controller
 - `/etc/modprobe.d/60-ry-modules.conf` — `amdxdna` blacklist; comment-only while `BLACKLIST_AMDXDNA=false`
 
@@ -159,7 +159,7 @@ The length of each array among the shared tunables is a drift tripwire in `_ir_v
 
 ### Initramfs
 
-`HOOKS` order is an invariant, checked along with hook and module presence before `mkinitcpio.conf` is deployed, `--install-file` of `mkinitcpio.conf` or `sdboot-manage.conf` (the preflight disk-space gate runs too) included: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
+`HOOKS` order is an invariant, checked with hook and module presence before `mkinitcpio.conf` is deployed and by an `--install-file` of `mkinitcpio.conf` or `sdboot-manage.conf`, which also runs the preflight disk-space gate: `base` first, `fsck` last, no duplicates, and `systemd` before `autodetect`, `keyboard`, and `sd-vconsole`; `autodetect` before `microcode` and `modconf`; `keyboard` before `sd-vconsole`; `modconf` before `kms`; `block` before `filesystems`.
 
 - `MKINITCPIO_MODULES` = `amdgpu` → `MODULES=()`
 - `MKINITCPIO_HOOKS` = `base`, `systemd`, `autodetect`, `microcode`, `modconf`, `kms`, `keyboard`, `sd-vconsole`, `block`, `filesystems`, `fsck` → `HOOKS=()`
@@ -254,7 +254,7 @@ Adding or dropping a token means editing `KERNEL_PARAMS` in both scripts and its
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters but `quiet`, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds.
 - `timeout 0` with `default @saved` — with no saved entry (fresh ESP), systemd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
 
 ## BIOS

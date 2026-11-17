@@ -3,14 +3,26 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.269.0
+7.270.0
 -------
 
-  - preflight: a sudoers verifypw that lets sudo -v skip authentication now
-    prompts once through a command on a TTY instead of exiting 3
+  - configuration: a temp-file write that sudo refused names the lapsed cache
+  - packages: a -Syu pass that sudo refused reads not run; no -Syyu retry
+  - packages: a mkinitcpio.conf revert that sudo refused at its probe, mktemp,
+    copy, cmp, chmod, chown or mv reads not run and names the conf at risk
+  - packages: a mkinitcpio.conf snapshot probe that sudo refused WARNs that
+    rollback is unavailable; it no longer logs the file as absent
+  - services: an fstab awk/tee rewrite, chmod or chown --reference, or
+    findmnt --verify that sudo refused reads not run, naming the lapsed cache
+  - install-file: a sysctl --system, nft -c re-check or udevadm verify that
+    sudo refused reads not run, not failed or no verdict
+  - logging: a conflict swap, explicit mark, indexer, mkinitcpio.conf snapshot
+    probe or revert that sudo refused logs _LAPSE, not _FAIL
+  - logging: a regdom, sysctl, nft -c or udevadm verify post-hook step that
+    sudo refused logs _LAPSE
 
 
-7.246.0 - 7.268.0
+7.246.0 - 7.269.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -27,7 +39,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     its owed restart, and a config that fails to land is not left owed
   - configuration: 7.255.0 an unchanged system file not owned by root:root is
     chowned back, as a drifted mode is restored
-  - configuration: 7.256.0 bluez5.roles from WP_BLUEZ_ROLES, no hfp_*/hsp_*
+  - configuration: 7.256.0 WP_BLUEZ_ROLES sets bluez5.roles, no hfp_*/hsp_*
     role, in ~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf
   - configuration: 7.257.0 a boot file's post-write check compares sizes (NUL
     bytes); a sudo lapse at its restore probe prints the restore command
@@ -40,7 +52,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     restores its .ry.bak by copy then rename; the restore hint uses sudo cp
   - configuration: 7.260.0 an nft -c or a parent-dir mkdir that ran and failed
     as the sudo ticket expired reads as failed, not as a lapse
-  - configuration: 7.267.0 a temp-file chmod, an atomic move or an owner or
+  - configuration: 7.267.0 a temp-file chmod, an atomic move, or an owner or
     mode repair that sudo refused names the lapsed cache
   - packages: 7.246.0 a missing member whose dependency conflicts with an
     installed package is held for the swap
@@ -81,7 +93,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - guard: 7.250.0 a fish universal named like internal state (the error names
     its set -eU) or regex-easyesc turned off exits 3
   - guard: 7.250.0 a fish universal named like the mkinitcpio snapshot, the
-    tmpfile list or the boot-path or systemd-version cache is never read
+    tmpfile list, or the boot-path or systemd-version cache is never read
   - guard: 7.250.0 an early exit or a signal before the JSONL header removes
     only the empty log and ~/ry-install dirs this run created
   - guard: 7.250.0 an early exit no longer runs a user's fish function named
@@ -162,6 +174,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     sudo gate (timestamp_type=ppid); they refused every command under timeout
   - preflight: 7.268.0 a background sudo -n true every 30 s keeps the ticket
     alive until exit, so a long -Syu no longer lapses it; sudo banner cut
+  - preflight: 7.269.0 a verifypw that lets sudo -v skip authentication
+    prompts once through a command on a TTY instead of exiting 3
   - lock: 7.254.0 the lock dir is set 00700, clearing an inherited setgid bit;
     the printed lock-removal command escapes its path
   - lock: 7.254.0 - 7.255.0 a signal while dropping a reclaim claim or
@@ -178,7 +192,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - services: 7.251.0 an owed systemd-resolved restart that a lapsed sudo
     cache blocks reads WARN (applies next boot), not SKIP
   - services: 7.252.0 the fstab rewrite no longer refuses over a findmnt
-    --verify error, 7.254.0 or parse error, the original carries
+    --verify error, 7.254.0 or a parse error, that the original carries too
   - services: 7.252.0 under a lapsed sudo cache a masked ufw.service reads
     firewall unverified, not down; enable and mask retries name the lapse
   - services: 7.252.0 nftables-first no longer claims ufw rules stay before
@@ -212,8 +226,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     sudo ticket expired reads as failed, not as a lapse
   - services: 7.260.0 the enable row reads enabled, not started for a unit
     whose start failed or was refused
-  - services: 7.267.0 a PKGS_DEL removal, an fstab size probe or move or a ufw
-    disable that sudo refused names the lapsed cache
+  - services: 7.267.0 a PKGS_DEL removal, an fstab size probe or move, or a
+    ufw disable that sudo refused names the lapsed cache
   - services: 7.267.0 an nftables ruleset probe that sudo refused before the
     ufw flush reads not probed, not as a ruleset not confirmed live
   - boot: 7.250.0 an empty loader entries directory no longer adds
@@ -254,7 +268,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: 7.254.0 an absent udevadm, or a failed verify or reload,
     says udevd re-reads the changed rule on its next event, not at next boot
   - install-file: 7.254.0 a post-write nft -c or udevadm verify that could not
-    run or timed out, 7.258.0 or that sudo kept from running, is no verdict
+    run or timed out, 7.258.0 or a udevadm verify sudo refused, is no verdict
   - install-file: 7.254.0 a resolved, NetworkManager or environment.d apply
     that succeeds strikes its owed entry
   - install-file: 7.254.0 each managed file runs its own post-hook, so a HOME
@@ -284,8 +298,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
   - logging: 7.247.0 boot-cascade and udev-skip records carry the POST_
     prefix; a failed date no longer breaks the header JSON
-  - logging: 7.247.0 _run clears its capture before an early return, the
-    bail-out record precedes INSTALLATION END, an empty loud _err logs nothing
+  - logging: 7.247.0 _run clears its capture before an early return; the
+    bail-out record precedes INSTALLATION END; an empty loud _err logs nothing
   - logging: 7.250.0 a full install no longer logs a second rebuild command
     ahead of the banner, nor the per-file reboot hint after an nft -c failure
   - logging: 7.250.0 closing log-file lines are skipped once stderr is gone;
@@ -323,7 +337,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - logging: 7.258.0 a sudo lapse at a managed file's read, mode or owner
     probe logs SKIP_PROBE_SUDO_LAPSE or MODE_DRIFT_UNPROBED
   - logging: 7.258.0 the mkinitcpio revert's cp, cmp, chmod, chown and mv, the
-    snapshot cp and the fstab chmod and chown log their error
+    snapshot cp, and the fstab chmod and chown log their error
   - logging: 7.258.0 PACTREE_PROBE_FAIL logs the rc; POSTWRITE_VERIFY_FAIL a
     reason, both digests and, for reason=size, both sizes
   - logging: 7.258.0 POSTWRITE_RESTORE_STALE only when an older copy exists;
@@ -338,7 +352,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     post-hook restarts POST_RESOLVED_RESTART_LAPSE or POST_NM_RESTART_LAPSE
   - logging: 7.260.0 a lapsed read-back logs POSTWRITE_VERIFY_SKIP
     reason=read_lapse, a failed one POSTWRITE_VERIFY_FAIL reason=unreadable
-  - logging: 7.260.0 a mkinitcpio revert after the footer prints, logs nothing
+  - logging: 7.260.0 a post-footer mkinitcpio revert prints but logs nothing
   - logging: 7.265.0 every run logs the running kernel release as
     KERNEL_RELEASE
   - logging: 7.267.0 sudo-refused steps log their key with _LAPSE for _FAIL,
@@ -461,7 +475,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     the log-write warning allows a removed JSONL
   - logging: 7.245.0 _run times commands on the monotonic clock;
     TIMEOUT_LONGOP_CAP is renamed TIMEOUT_LONGOP_FLOOR
-  - progress: 7.243.0 a resize re-pins the bar on the new bottom row, an
+  - progress: 7.243.0 a resize re-pins the bar on the new bottom row; an
     aborted run counts 6 phases; 7.245.0 the bar unpins before its last writes
   - summary: 7.243.0 the result matrix rule matches the full row width
   - consistency: 7.242.0 error text reads 'unparsable', not 'unparseable'
@@ -614,8 +628,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - dns: 7.123.0 - 7.129.0 pin upstreams in resolved and NM global-dns
   - env: 7.123.0 - 7.129.0 FSR4_UPGRADE -> PROTON_FSR4_UPGRADE; drop
     VKD3D_CONFIG
-  - configuration: 7.100.0 - 7.107.3 17 configs deployed atomically; 7.137.0 -
-    7.138.0 drop the dormant RY_REMOTE_PLAY_PORTS nftables gate
+  - configuration: 7.100.0 - 7.107.3 17 configs deployed atomically;
+    7.137.0 - 7.138.0 drop the dormant RY_REMOTE_PLAY_PORTS nftables gate
   - lock: 7.108.0 - 7.117.0 dead-PID reclaim only, live or ambiguous pidfiles
     fail closed
   - services: 7.118.0 - 7.122.0 mask ufw instead of removing; the

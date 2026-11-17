@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.269.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.270.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.269.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.270.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -1004,6 +1004,7 @@ function _as --argument-names use_sudo --description "Prefix command with sudo o
     end
 end
 function _sudo_try --description "Run sudo -n, stdout dropped; its first stderr line lands in _RY_SUDO_ERR as ' (line)'"; set -g _RY_SUDO_ERR (sudo -n -- $argv 2>&1 >/dev/null)[1]; set -l _rc $status; set -q _RY_SUDO_ERR[1]; and set -g _RY_SUDO_ERR " ($_RY_SUDO_ERR)"; return $_rc; end
+function _sudo_refused --description "True when sudo refused the last _run (try: the last _sudo_try) and the ticket is gone"; set -l _l $_RY_RUN_ERR_CAP[1]; test "$argv[1]" = try; and set _l (string sub -s 3 -- "$_RY_SUDO_ERR"); string match -q -- 'sudo: *' "$_l"; and not sudo -n true 2>/dev/null; end
 
 # ── TMPFILE TRACKING + KEY DERIVATION ──
 function _dst_key --argument-names path --description "Generator-name key for a destination path (HOME prefix → HOME, / → _)"
@@ -1786,7 +1787,8 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
     end
     if test "$_ps[2]" -ne 0
         set -l _tee_msg ""; test -n "$_tee_err"; and test -s "$_tee_err"; and set _tee_msg " tee_err="(command head -n 1 -- "$_tee_err" | string trim --)
-        _fail "→ $dst (write to temp failed)$_tee_msg"; _rm_tmp "$_tee_err" false; return 1
+        set -l _why ""; string match -q -- ' tee_err=sudo: *' "$_tee_msg"; and not sudo -n true 2>/dev/null; and begin; set _why " — sudo cache lapsed"; set _tee_msg ""; end # sudo refused the tee
+        _fail "→ $dst (write to temp failed$_why)$_tee_msg"; _rm_tmp "$_tee_err" false; return 1
     end
     _rm_tmp "$_tee_err" false; return 0
 end
@@ -1818,7 +1820,7 @@ function _ry_mode_repair --argument-names dst use_sudo perms --description "_ry_
             _warn "  $dst: owner $_ow repaired to root:root (content unchanged)"; _log "OWNER_DRIFT_REPAIRED: dst=$dst from=$_ow"
         else
             set -l _why "chown failed"; set -l _key OWNER_DRIFT_REPAIR_FAIL
-            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "chown not run (sudo cache lapsed)"; set _key OWNER_DRIFT_REPAIR_LAPSE; end # sudo refused it
+            _sudo_refused; and begin; set _why "chown not run (sudo cache lapsed)"; set _key OWNER_DRIFT_REPAIR_LAPSE; end # sudo refused it
             _warn_loud "  $dst: owner $_ow is not root:root and $_why — repair by hand"; _log "$_key: dst=$dst from=$_ow"
         end
     end
@@ -1828,19 +1830,19 @@ function _ry_mode_repair --argument-names dst use_sudo perms --description "_ry_
         _warn "  $dst: mode $cur repaired to $perms (content unchanged)"; _log "MODE_DRIFT_REPAIRED: dst=$dst from=$cur to=$perms"
     else
         set -l _why "chmod failed"; set -l _key MODE_DRIFT_REPAIR_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "chmod not run (sudo cache lapsed)"; set _key MODE_DRIFT_REPAIR_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "chmod not run (sudo cache lapsed)"; set _key MODE_DRIFT_REPAIR_LAPSE; end # sudo refused it
         _warn_loud "  $dst: mode $cur differs from $perms and $_why — repair by hand"; _log "$_key: dst=$dst from=$cur to=$perms"
     end
 end
 function _awf_finalize_mv --argument-names dst tmpfile use_sudo perms --description "_atomic_write_file sub: chmod + sudo cache check + atomic mv"
     set -l _sp; test "$use_sudo" = true; and set _sp sudo -n
     if not _run $_sp chmod -- $perms "$tmpfile"
-        set -l _why ""; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why " — sudo cache lapsed" # sudo refused it
+        set -l _why ""; _sudo_refused; and set _why " — sudo cache lapsed" # sudo refused it
         _fail "→ $dst (chmod failed$_why)"; return 1
     end
     if test "$use_sudo" = true; and not sudo -n true 2>/dev/null; _fail "→ $dst (sudo cache lapsed before atomic mv — aborting)"; return 1; end
     if not _run $_sp mv -T -- "$tmpfile" "$dst"
-        set -l _why ""; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why " — sudo cache lapsed" # sudo refused it
+        set -l _why ""; _sudo_refused; and set _why " — sudo cache lapsed" # sudo refused it
         _fail "→ $dst (atomic move failed$_why)"; return 1
     end
     return 0
@@ -1871,7 +1873,7 @@ function _awf_make_backup --argument-names dst use_sudo --description "_atomic_w
         _log "BACKUP_CREATED: $dst → $_bak"; set -g _RY_BACKUP_LAST "$_bak"
     else
         set -l _why failed; set -l _key BACKUP_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key BACKUP_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key BACKUP_LAPSE; end # sudo refused it
         _warn_loud "  $dst: backup to $_bak $_why — proceeding (atomic write still protects original on write failure)"; _log "$_key: $dst → $_bak" # loud: install pins QUIET; the deploy and fstab rows read PASS
     end
     return 0
@@ -1938,7 +1940,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
                 _log "NFT_PREVALIDATE_TIMEOUT: $dst rc=$_nc_rc"; return 1
             end
             if test "$_nc_rc" -ne 0
-                if test "$use_sudo" = true; and string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused nft -c: no verdict
+                if test "$use_sudo" = true; and _sudo_refused # sudo refused nft -c: no verdict
                     _fail "  $dst: nft -c could not run (sudo cache lapsed) — refusing deploy (live ruleset and installed file unchanged)"
                     _log "NFT_PREVALIDATE_LAPSE: $dst rc=$_nc_rc"; return 1
                 end
@@ -1986,7 +1988,7 @@ function _ry_mkdir_0755 --argument-names use_sudo dir --description "Create dirs
 end
 function _ry_install_file --argument-names dst use_sudo --description "Install a single embedded config to its destination"
     set -l dir (command dirname -- "$dst")
-    if not _ry_mkdir_0755 "$use_sudo" "$dir"; set -l _why ""; test "$use_sudo" = true; and string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why " (sudo cache lapsed)"; _fail "Cannot create directory: $dir$_why"; return 1; end
+    if not _ry_mkdir_0755 "$use_sudo" "$dir"; set -l _why ""; test "$use_sudo" = true; and _sudo_refused; and set _why " (sudo cache lapsed)"; _fail "Cannot create directory: $dir$_why"; return 1; end
     set -l perms 0644; test "$use_sudo" = false; and set perms 0600
     set -l _new_bytes (_ry_content_bytes "$dst" | string collect --no-trim-newlines --allow-empty); set -l _gen_rc $pipestatus[1]
     set -l _cur_bytes ""; set -l _read_rc -1 # fn scope: shared by the probe and compare branches
@@ -2070,33 +2072,30 @@ function _install_preflight --description "Run all preflight checks before insta
 end
 
 # ── MKINITCPIO.CONF: SNAPSHOT + REVERT (cp + cmp byte-exact) ──
+function _mr_fail --argument-names step what --description "_mr_copy_cmp_verify and _mr_chmod_chown_mv sub: ERR + log a failed or sudo-refused revert step"
+    set -l _how "failed at $step"; set -l _key MKINITCPIO_REVERT_FAIL; set -l _f " failed"
+    _sudo_refused try; and begin; set _how "not run at $step (sudo cache lapsed)"; set _key MKINITCPIO_REVERT_LAPSE; set _f ""; end # sudo refused it
+    _err "  /etc/mkinitcpio.conf revert $_how — current conf may reference uninstalled modules"; _log "$_key: $what$_f$_RY_SUDO_ERR"
+end
 function _mr_copy_cmp_verify --argument-names backup_file _mki_tmp --description "_mkinitcpio_revert sub: cp + byte-exact content verify (cmp)"
-    if not _sudo_try cp -- "$backup_file" "$_mki_tmp"
-        _err "  /etc/mkinitcpio.conf revert failed at copy — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_FAIL: cp $backup_file failed$_RY_SUDO_ERR"
-        return 1
-    end
+    if not _sudo_try cp -- "$backup_file" "$_mki_tmp"; _mr_fail copy "cp $backup_file"; return 1; end
     if not command -q cmp
         _log "MKINITCPIO_REVERT_CMP_SKIP: cmp(1) absent — byte-exact verify skipped (cp rc=0 is the only gate)"; return 0
     end
     _sudo_try cmp -s -- "$backup_file" "$_mki_tmp"; set -l _crc $status; test "$_crc" -eq 0; and return 0 # cmp -s: rc 1 on a mismatch, 2 on trouble (silent)
+    _sudo_refused try; and begin; _mr_fail cmp cmp; return 1; end # sudo refused it
     set -l _why "content mismatch between backup and tmp"; test "$_crc" -eq 1; and test -z "$_RY_SUDO_ERR"; or set _why "rc=$_crc$_RY_SUDO_ERR" # a line beside rc 1 may be sudo refusing
     _err "  /etc/mkinitcpio.conf revert failed at cmp — $_why"; _log "MKINITCPIO_REVERT_FAIL: cmp $_why"; return 1
 end
 function _mr_chmod_chown_mv --argument-names _mki_tmp --description "_mkinitcpio_revert sub: chmod/chown --reference + atomic mv"
-    if not _sudo_try chmod --reference=/etc/mkinitcpio.conf -- "$_mki_tmp"
-        _err "  /etc/mkinitcpio.conf revert failed at chmod — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_FAIL: chmod failed$_RY_SUDO_ERR"; return 1
-    end
-    if not _sudo_try chown --reference=/etc/mkinitcpio.conf -- "$_mki_tmp"
-        _err "  /etc/mkinitcpio.conf revert failed at chown — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_FAIL: chown failed$_RY_SUDO_ERR"; return 1
-    end
-    if not _sudo_try mv -T -- "$_mki_tmp" /etc/mkinitcpio.conf
-        _err "  /etc/mkinitcpio.conf revert failed at atomic mv — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_FAIL: mv failed$_RY_SUDO_ERR"; return 1
-    end
+    if not _sudo_try chmod --reference=/etc/mkinitcpio.conf -- "$_mki_tmp"; _mr_fail chmod chmod; return 1; end
+    if not _sudo_try chown --reference=/etc/mkinitcpio.conf -- "$_mki_tmp"; _mr_fail chown chown; return 1; end
+    if not _sudo_try mv -T -- "$_mki_tmp" /etc/mkinitcpio.conf; _mr_fail "atomic mv" mv; return 1; end
     return 0
 end
 function _mkinitcpio_revert --argument-names backup_file --description "Restore /etc/mkinitcpio.conf from backup path (pacman -Syu rollback)"
     if test -z "$backup_file"; _err "  /etc/mkinitcpio.conf revert: empty backup_file path"; _log "MKINITCPIO_REVERT_FAIL: empty path"; return 1; end
-    if not sudo -n true 2>/dev/null; _err "  /etc/mkinitcpio.conf revert failed at probe — sudo cache lapsed"; _log "MKINITCPIO_REVERT_FAIL: sudo lapse at probe"; return 1; end
+    if not sudo -n true 2>/dev/null; _err "  /etc/mkinitcpio.conf revert not run (sudo cache lapsed) — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_LAPSE: probe"; return 1; end
     if not sudo -n test -f "$backup_file" 2>/dev/null
         _err "  /etc/mkinitcpio.conf revert failed at probe — backup file missing: $backup_file"; _log "MKINITCPIO_REVERT_FAIL: backup file missing $backup_file"
         return 1
@@ -2104,7 +2103,10 @@ function _mkinitcpio_revert --argument-names backup_file --description "Restore 
     if command -q cmp; and sudo -n cmp -s -- "$backup_file" /etc/mkinitcpio.conf 2>/dev/null; _log "MKINITCPIO_REVERT_NOOP: /etc/mkinitcpio.conf already matches $backup_file"; return 0; end # the seed never landed: no rewrite, no restored WARN
     set -l _mki_tmp (sudo -n mktemp -p /etc .ry-install.mki.XXXXXX 2>/dev/null) # tmpfile in dst parent: same-FS mv -T atomic
     _track_tmpfile "$_mki_tmp"
-    if test -z "$_mki_tmp"; _err "  /etc/mkinitcpio.conf revert failed at mktemp — current conf may reference uninstalled modules"; _log "MKINITCPIO_REVERT_FAIL: mktemp failed"; return 1; end
+    if test -z "$_mki_tmp"
+        set -l _how "failed at mktemp"; set -l _key MKINITCPIO_REVERT_FAIL; set -l _f " failed"; sudo -n true 2>/dev/null; or begin; set _how "not run at mktemp (sudo cache lapsed)"; set _key MKINITCPIO_REVERT_LAPSE; set _f ""; end
+        _err "  /etc/mkinitcpio.conf revert $_how — current conf may reference uninstalled modules"; _log "$_key: mktemp$_f"; return 1
+    end
     if sudo -n test -L "$_mki_tmp" 2>/dev/null
         _rm_tmp "$_mki_tmp" true; _err "  /etc/mkinitcpio.conf revert failed at symlink check — current conf may reference uninstalled modules"
         _log "MKINITCPIO_REVERT_FAIL: tmp is symlink"; return 1
@@ -2115,8 +2117,10 @@ function _mkinitcpio_revert --argument-names backup_file --description "Restore 
 end
 function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot /etc/mkinitcpio.conf for rollback"
     set -g _RY_MKI_BACKUP_FILE ""; set -g _RY_MKI_HAD_ORIG false; set -g _RY_MKI_REVERTED false
-    if not sudo -n true 2>/dev/null; _log "MKINITCPIO_SNAPSHOT_SKIP: sudo -n returned non-zero before snapshot"; return 0; end
-    if not sudo -n test -f /etc/mkinitcpio.conf 2>/dev/null; _log "MKINITCPIO_SNAPSHOT_SKIP: /etc/mkinitcpio.conf absent (no rollback copy; a failed -Syu keeps the seeded conf)"; return 0; end
+    if not sudo -n test -f /etc/mkinitcpio.conf 2>/dev/null
+        sudo -n true 2>/dev/null; or begin; _warn "  mkinitcpio.conf snapshot skipped: sudo cache lapsed (rollback will be unavailable)"; _log "MKINITCPIO_SNAPSHOT_LAPSE: probe"; return 0; end
+        _log "MKINITCPIO_SNAPSHOT_SKIP: /etc/mkinitcpio.conf absent (no rollback copy; a failed -Syu keeps the seeded conf)"; return 0
+    end
     set -g _RY_MKI_SNAP_TRY true # a signal from here may strand an untracked snapshot: swept
     sudo -n install -d -m 0700 -o root -g root /run/ry-install 2>/dev/null
     set -l _snap (sudo -n mktemp -p /run/ry-install ry-install.mki-snap.$fish_pid.XXXXXX 2>/dev/null) # PID-scoped: the exit sweep finds an untracked one
@@ -2127,7 +2131,7 @@ function _ip_snapshot_mkinitcpio --description "_install_packages sub: Snapshot 
     _track_tmpfile "$_snap"
     if not _sudo_try cp -- /etc/mkinitcpio.conf "$_snap"
         set -l _why "cp failed"; set -l _key MKINITCPIO_SNAPSHOT_FAIL
-        string match -q -- ' (sudo: *' "$_RY_SUDO_ERR"; and not sudo -n true 2>/dev/null; and begin; set _why "sudo cache lapsed"; set _key MKINITCPIO_SNAPSHOT_LAPSE; end # sudo refused it
+        _sudo_refused try; and begin; set _why "sudo cache lapsed"; set _key MKINITCPIO_SNAPSHOT_LAPSE; end # sudo refused it
         _rm_tmp "$_snap" true; _warn "  mkinitcpio.conf snapshot skipped: $_why (rollback will be unavailable)"; _log "$_key: cp$_RY_SUDO_ERR"; return 0
     end
     set -g _RY_MKI_BACKUP_FILE "$_snap"; set -g _RY_MKI_HAD_ORIG true # revert chmods --reference=destination
@@ -2186,8 +2190,8 @@ function _ip_conflict_swap --description "_ip_pacman_invoke sub: Install held pa
         _ok "Conflict swap: $argv installed; $_ev"; _log "PKG_CONFLICT_SWAP_OK: $argv ($_ev)"; set -g _RY_PKG_SWAP_EV "$_ev"; return 0
     end
     _taint; set --erase -g _RY_PKG_INFLIGHT # pending before any [ERR]: each one forks
-    set -l _how failed; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _how "not run (sudo cache lapsed)" # sudo refused it
-    _err "Conflict swap $_how: $argv — by hand: sudo pacman -Syu $argv, answering y to the removal"; _log "PKG_CONFLICT_SWAP_FAIL: $argv"; set -ga _RY_PKG_FAIL_EV "conflict swap "(string replace -- ' cache lapsed' '' "$_how"); return 1 # QUIET hides the ERR: the -Syu row names it
+    set -l _how failed; set -l _key PKG_CONFLICT_SWAP_FAIL; _sudo_refused; and begin; set _how "not run (sudo cache lapsed)"; set _key PKG_CONFLICT_SWAP_LAPSE; end # sudo refused it
+    _err "Conflict swap $_how: $argv — by hand: sudo pacman -Syu $argv, answering y to the removal"; _log "$_key: $argv"; set -ga _RY_PKG_FAIL_EV "conflict swap "(string replace -- ' cache lapsed' '' "$_how"); return 1 # QUIET hides the ERR: the -Syu row names it
 end
 function _pacman_hook_errors --argument-names what flag key --description "Flag an rc-0 pacman run whose hooks or scriptlets logged errors: WARN, JSONL key, set flag"
     set -l _hits (string match -r -- '^error: .*|^==> ERROR: .*' $_RY_RUN_ERR_CAP $_RY_RUN_OUT_CAP | string match -rv -- '^error: failed retrieving file ') # alpm: a failed hook is an error line, rc 0; mirror fallback is not
@@ -2242,6 +2246,10 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
     set -q _RY_PKG_HELD[1]; and _log "PKG_CONFLICT_HELD: $_RY_PKG_HELD (an installed package conflicts; installed after -Syu)"
     set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)'); test "$pipestatus[1]" -eq 0; or set _q_pre "" # name+version fingerprint; empty pre/post = fail-open true
     if not _ip_syu_pass $_pacman_first
+        if _sudo_refused # sudo refused the pass: a retry would be refused too
+            _taint; set --erase -g _RY_PKG_INFLIGHT; _err "Package installation not run (sudo cache lapsed) — no -Syyu retry"; set -ga _RY_PKG_FAIL_EV "-Syu refused (sudo)"
+            _ip_seed_revert; return 1
+        end
         _warn_loud_cont "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve a conflict no missing member pulls — see JSONL log for the failed pass's output)..." # loud: install pins QUIET; the retry's outcome counts it once
         set -g _RY_PKG_HELD (_ip_conflict_held $argv); for _p in $_RY_PKG_DEP_HELD; contains -- "$_p" $_RY_PKG_HELD; or set -ga _RY_PKG_HELD "$_p"; end # -y refreshed the sync db: re-hold
         set -q _RY_PKG_HELD[1]; and _log "PKG_CONFLICT_HELD: $_RY_PKG_HELD (re-read for the -Syyu retry)"
@@ -2249,7 +2257,7 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
             _taint; set --erase -g _RY_PKG_INFLIGHT # pending before any [ERR]: each one forks
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"; set -ga _RY_PKG_FAIL_EV "pacman db locked mid-run"
-            else if string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused the retry: pacman never ran
+            else if _sudo_refused # sudo refused the retry: pacman never ran
                 _err "Package installation failed — the -Syyu retry never ran (sudo cache lapsed)"; set -ga _RY_PKG_FAIL_EV "-Syu failed; -Syyu refused (sudo)"
             else
                 _err "Package installation failed after retry"; set -ga _RY_PKG_FAIL_EV "-Syu and -Syyu retry failed"
@@ -2275,10 +2283,10 @@ function _mark_pkgs_add_explicit --description "Re-mark installed PKGS_ADD expli
     set -l _add_present (command pacman -Qq -- $PKGS_ADD 2>/dev/null)
     if not set -q _add_present[1]; _log "PKG_ASEXPLICIT_SKIP: no PKGS_ADD package found by pacman -Qq"; return 0; end
     if not _run sudo -n LC_ALL=C.UTF-8 pacman -D --asexplicit -- $_add_present
-        set -l _why ""; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why " (sudo cache lapsed)"
+        set -l _why ""; set -l _key PKG_ASEXPLICIT_FAIL; _sudo_refused; and begin; set _why " (sudo cache lapsed)"; set _key PKG_ASEXPLICIT_LAPSE; end
         set -l _wm "  Could not mark PKGS_ADD packages explicit$_why — orphan-removal exemption not guaranteed for any pre-installed as a dependency"
         if set -q _RY_ADD_EXPLICIT_WARNED; _msg_nocount WARN "$_wm"; else; set -g _RY_ADD_EXPLICIT_WARNED true; _warn "$_wm"; end # a retry from Services failing again counts once
-        _log "PKG_ASEXPLICIT_FAIL: pacman -D --asexplicit returned non-zero$_why for: $_add_present"; return 1
+        _log "$_key: pacman -D --asexplicit returned non-zero$_why for: $_add_present"; return 1
     end
     set -g _RY_ADD_EXPLICIT_OK true; _log "PKG_ASEXPLICIT_OK: marked explicit ("(count $_add_present)"): $_add_present"; return 0
 end
@@ -2422,7 +2430,8 @@ function _far_awk_rewrite --argument-names tmpfstab --description "_fstab_atomic
         set -l _ps_str (string join , -- $_ps); test -z "$_ps_str"; and set _ps_str "(empty)"
         set -l _awk_msg ""; test -n "$_awk_err"; and test -s "$_awk_err"; and set _awk_msg " awk_err="(command head -n 1 -- "$_awk_err" | string trim --)
         set -l _tee_msg ""; test -n "$_tee_err"; and test -s "$_tee_err"; and set _tee_msg " tee_err="(command head -n 1 -- "$_tee_err" | string trim --)
-        _rm_tmp "$_awk_err" false; _rm_tmp "$_tee_err" false; _fail "  /etc/fstab: awk/tee rewrite failed (pipestatus=$_ps_str)$_awk_msg$_tee_msg"; return 1
+        set -l _how "failed (pipestatus=$_ps_str)$_awk_msg$_tee_msg"; string match -qr -- ' (awk|tee)_err=sudo: ' "$_awk_msg$_tee_msg"; and not sudo -n true 2>/dev/null; and set _how "not run (sudo cache lapsed)" # sudo refused awk or tee
+        _rm_tmp "$_awk_err" false; _rm_tmp "$_tee_err" false; _fail "  /etc/fstab: awk/tee rewrite $_how"; return 1
     end
     _rm_tmp "$_awk_err" false; _rm_tmp "$_tee_err" false
     set -l _src_lines (sudo -n awk 'END{print NR}' /etc/fstab 2>/dev/null); set -l _tmp_lines (sudo -n awk 'END{print NR}' "$tmpfstab" 2>/dev/null) # awk is 1-in-1-out: counts must match
@@ -2446,18 +2455,20 @@ function _far_awk_rewrite --argument-names tmpfstab --description "_fstab_atomic
 end
 
 # ── INSTALL PHASE 4: FSTAB ATOMIC REPLACE (FINDMNT GATE) + _install_fstab_opts ──
+function _far_ref_fail --argument-names op tmpfstab --description "_fstab_atomic_replace sub: FAIL a failed or refused chmod/chown --reference"; set -l _w "failed$_RY_SUDO_ERR"; _sudo_refused try; and set _w "not run (sudo cache lapsed)"; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: $op --reference $_w"; end
 function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp + awk + verify + mv)"
     set -l tmpfstab (sudo -n mktemp -p /etc .ry-install.fstab.XXXXXX 2>/dev/null) # tmpfile in dst parent: same-FS mv -T atomic
     if test -z "$tmpfstab"; set -l _why ""; sudo -n true 2>/dev/null; or set _why " (sudo cache lapsed)"; _fail "  /etc/fstab: mktemp failed$_why"; return 1; end
     _track_tmpfile "$tmpfstab"
     if sudo -n test -L "$tmpfstab" 2>/dev/null; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: temp file is symlink — aborting"; return 1; end
     if not _far_awk_rewrite "$tmpfstab"; _rm_tmp "$tmpfstab" true; return 1; end
-    if not _sudo_try chmod --reference=/etc/fstab -- "$tmpfstab"; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: chmod --reference failed$_RY_SUDO_ERR"; return 1; end
-    if not _sudo_try chown --reference=/etc/fstab -- "$tmpfstab"; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: chown --reference failed$_RY_SUDO_ERR"; return 1; end
+    if not _sudo_try chmod --reference=/etc/fstab -- "$tmpfstab"; _far_ref_fail chmod "$tmpfstab"; return 1; end
+    if not _sudo_try chown --reference=/etc/fstab -- "$tmpfstab"; _far_ref_fail chown "$tmpfstab"; return 1; end
     if command -q findmnt
         set -l _vt (_run_resolve_timeout); set -l _vto timeout --foreground --kill-after=10 $_vt # it stats every target; timeout(1) reads 0 as no limit
         set -l _verify_out (command $_vto sudo -n LC_ALL=C.UTF-8 findmnt --verify --tab-file "$tmpfstab" 2>&1); set -l _vrc $status; set -l _new_e # C.UTF-8: the parse-error match reads untranslated lines
         if contains -- "$_vrc" 124 137; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: findmnt --verify timed out or was killed (rc=$_vrc) — refusing rewrite (fstab unchanged)"; _log "FSTAB_VERIFY_TIMEOUT: rc=$_vrc timeout=$_vt"; return 1; end # no verdict
+        if test "$_vrc" -ne 0; and string match -q -- 'sudo: *' $_verify_out[1]; and not sudo -n true 2>/dev/null; _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: findmnt --verify not run (sudo cache lapsed) — refusing rewrite (fstab unchanged)"; return 1; end # no verdict
         set -l _tmp_e (string match -r -- '^\s*\[E\].*' $_verify_out) (string match -rg -- '(parse error at line \d+) -- ignored$' $_verify_out) # an [E] or parse error the original carries is not ours
         if test "$_vrc" -ne 0; and set -q _tmp_e[1]
             set -l _old_e (command $_vto sudo -n LC_ALL=C.UTF-8 findmnt --verify --tab-file /etc/fstab 2>&1 | string match -r -- '^\s*\[E\].*|parse error at line \d+(?= -- ignored$)')
@@ -2477,7 +2488,7 @@ function _fstab_atomic_replace --description "Atomic /etc/fstab rewrite (mktemp 
     end
     _awf_make_backup /etc/fstab true # fstab gate is findmnt --verify
     if not _run sudo -n mv -T -- "$tmpfstab" /etc/fstab
-        set -l _why ""; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why " (sudo cache lapsed)" # sudo refused it
+        set -l _why ""; _sudo_refused; and set _why " (sudo cache lapsed)" # sudo refused it
         _rm_tmp "$tmpfstab" true; _fail "  /etc/fstab: atomic move failed$_why"; return 1
     end
     _untrack_tmpfile "$tmpfstab"; return 0
@@ -2531,7 +2542,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
         _pending_apply_drop /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf # applied: a re-run owes nothing
     else
         set -l _why "restart failed"; set -l _cell "restart failed (applies next boot)"; set -l _key RESOLVED_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed)"; set _cell "not run (sudo cache lapsed); applies next boot"; set _key RESOLVED_RESTART_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "restart not run (sudo cache lapsed)"; set _cell "not run (sudo cache lapsed); applies next boot"; set _key RESOLVED_RESTART_LAPSE; end # sudo refused it
         _warn "systemd-resolved $_why — drop-in still applies at next boot (non-fatal)"; _log "$_key: context=services"
         _phase_record "Services: resolved restart" WARN "$_cell"
     end
@@ -2606,7 +2617,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
             _pacman_hook_errors "PKGS_DEL removal" _RY_PKG_REMOVE_HOOK_ERR PKG_REMOVE_HOOK_ERROR; set -l _q (command pacman -Qq 2>/dev/null); and set _left $_q
         else
             set -l _why ""; set -l _key PKG_REMOVE_FAIL
-            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why " (sudo cache lapsed)"; set _key PKG_REMOVE_LAPSE; end # sudo refused it
+            _sudo_refused; and begin; set _why " (sudo cache lapsed)"; set _key PKG_REMOVE_LAPSE; end # sudo refused it
             _warn "Failed to remove $pkg$_why"; _log "$_key: $pkg"
         end
     end
@@ -2681,7 +2692,7 @@ function _csm_retry_individual --description "_configure_services_mask sub: Per-
             _ok "Masked: $_unit"
         else
             set -l _state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
-            if string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused the mask: no stop failure
+            if _sudo_refused # sudo refused the mask: no stop failure
                 _err "Failed to mask: $_unit (sudo cache lapsed; is-enabled=$_state)"; _log "MASK_LAPSE: unit=$_unit is-enabled=$_state"
                 set -ga _RY_MASK_FAILS $_unit; set _ret 1
             else if test "$_state" = masked # --now stops only after a successful mask: the stop failed
@@ -2734,7 +2745,7 @@ function _csm_prepare_ufw_masking --argument-names nft_live --description "_conf
             _ok "ufw disabled — netfilter rules flushed (nftables default-deny live)"; _log "UFW_RULE_FLUSH_OK"
         else
             set -l _why failed; set -l _key UFW_RULE_FLUSH_FAIL
-            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key UFW_RULE_FLUSH_LAPSE; end # sudo refused it
+            _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key UFW_RULE_FLUSH_LAPSE; end # sudo refused it
             _warn "ufw --force disable $_why — withholding the ufw.service mask this run so a stop-triggered flush never fires in an unknown state"
             _log "$_key: mask deferred"; return 1
         end
@@ -2808,7 +2819,7 @@ function _cse_batch_enable --description "Batch enable system units"
             _ok "Enabled: $_unit"
         else
             set -l _enabled_state (command systemctl is-enabled -- $_unit 2>/dev/null | string trim --)
-            if string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null # sudo refused the enable: no start failure
+            if _sudo_refused # sudo refused the enable: no start failure
                 _err "Failed to enable: $_unit (sudo cache lapsed; is-enabled=$_enabled_state)"; _log "ENABLE_LAPSE: unit=$_unit is-enabled=$_enabled_state"
                 set -g INSTALL_HAD_ERRORS true; set -ga _RY_ENABLE_FAILS $_unit; set _ret 1
             else if contains -- "$_enabled_state" enabled alias static indirect generated # persistent states only: linked* read not-enabled (is-enabled rc 1)
@@ -2831,7 +2842,7 @@ function _cse_start_preset --description "_configure_services_enable sub: Start 
             _ok "Started: $_u (enabled by its package preset; was $_act)"; _log "PRESET_START_OK: unit=$_u was=$_act"
         else
             set -l _why "failed to start"; set -l _hint "will activate on next boot if config is fixed"; set -l _key PRESET_START_FAIL
-            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not started (sudo cache lapsed)"; set _hint "starts at next boot"; set _key PRESET_START_LAPSE; end # sudo refused it
+            _sudo_refused; and begin; set _why "not started (sudo cache lapsed)"; set _hint "starts at next boot"; set _key PRESET_START_LAPSE; end # sudo refused it
             _warn_loud "Enabled but $_why: $_u ($_hint)" # loud: install pins QUIET
             test "$_key" = PRESET_START_FAIL; and _warn_loud_cont "  Diagnose: systemctl status $_u; journalctl -u $_u -b"; _log "$_key: unit=$_u was=$_act"; set -ga _RY_ENABLE_START_FAILS "$_u"
         end
@@ -2870,7 +2881,7 @@ function _apply_wireless_regdom --description "Apply the wireless regulatory dom
     if _run sudo -n iw reg set "$COUNTRY"
         set -g _RY_REGDOM_RESULT PASS; set -g _RY_REGDOM_EVIDENCE "country $COUNTRY set"; return 0
     end
-    set -l _ev "iw reg set failed"; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _ev "sudo cache lapsed" # refused: iw never ran
+    set -l _ev "iw reg set failed"; _sudo_refused; and set _ev "sudo cache lapsed" # refused: iw never ran
     _warn "$_ev ($COUNTRY) — applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
     set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE "$_ev — applies via /etc/iw-regdomain"; return 0
 end
@@ -3055,13 +3066,11 @@ end
 
 # ── INSTALL PHASE 5: REBUILD SUBS (TAINT GATE + SDBOOT GEN + BOOTCTL + ENTRIES + SKIP ROWS) ──
 function _irb_skip_post_mki --description "_install_rebuild_boot and _irb_taint_gate sub: SKIP rows for sdboot-gen, bootctl update, sanity"
-    _phase_record "Boot: sdboot-manage gen" SKIP "aborted"
-    _phase_record "Boot: bootctl update" SKIP "aborted"
-    _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
+    _phase_record "Boot: sdboot-manage gen" SKIP "aborted"; _phase_record "Boot: bootctl update" SKIP "aborted"; _phase_record "Boot: post-rebuild sanity" SKIP "aborted"
 end
 function _run_rc_cell --argument-names rc --description "_irb_sdboot_apply and _install_rebuild_boot sub: Row cell for a failed _run rc"
     test "$rc" -eq "$EXIT_RUN_TMPFAIL" 2>/dev/null; and echo "not run (no capture dir)"; and return 0
-    string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and echo "not run (sudo cache lapsed)"; and return 0 # sudo refused it
+    _sudo_refused; and echo "not run (sudo cache lapsed)"; and return 0 # sudo refused it
     echo "rc=$rc"
 end
 function _irb_step_err --argument-names step cell note --description "_irb_sdboot_apply and _install_rebuild_boot sub: ERR a boot step that failed or did not run"
@@ -3074,8 +3083,7 @@ function _irb_sdboot_apply --description "_install_rebuild_boot sub: Run sdboot-
     end
     _run sudo -n sdboot-manage gen; set -l _rc $status
     if test "$_rc" -ne 0
-        set -l _cell (_run_rc_cell $_rc); _irb_step_err "sdboot-manage gen" "$_cell"
-        _err_cont "CRITICAL: Bootloader update failed — aborting remaining steps"
+        set -l _cell (_run_rc_cell $_rc); _irb_step_err "sdboot-manage gen" "$_cell"; _err_cont "CRITICAL: Bootloader update failed — aborting remaining steps"
         _phase_record "Boot: sdboot-manage gen" FAIL "$_cell"
         _phase_record "Boot: bootctl update" SKIP "aborted"; return $EXIT_BOOT_CRIT
     end
@@ -3132,8 +3140,7 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     set -q SYSTEM_UPGRADED; and test "$SYSTEM_UPGRADED" = true; and _ok "System upgraded during package installation"
     _run sudo -n mkinitcpio -P; set -l _mk_rc $status
     if test "$_mk_rc" -ne 0
-        set -l _cell (_run_rc_cell $_mk_rc); _irb_step_err mkinitcpio "$_cell"
-        _err_cont "CRITICAL: Boot rebuild failed — aborting remaining steps"
+        set -l _cell (_run_rc_cell $_mk_rc); _irb_step_err mkinitcpio "$_cell"; _err_cont "CRITICAL: Boot rebuild failed — aborting remaining steps"
         _phase_record "Boot: mkinitcpio -P" FAIL "$_cell"; _irb_skip_post_mki; return $EXIT_BOOT_CRIT
     end
     _phase_record "Boot: mkinitcpio -P" PASS "rc=0"; set -l _boot (_resolve_boot_path) # the preflight ESP gate cached it: never empty here
@@ -3155,8 +3162,8 @@ function _if_trim_pacman_cache --description "Trim pacman cache: paccache -rk2 t
     set -l _reason "upgrade"; test "$_upgraded" = false; and set _reason "removals=$_removed_n"
     if command -q paccache
         set -l _pc_ok true; set -l _pl false # -k last-wins, -u blacklists installed: separate invocations
-        _run sudo -n paccache -rk2; or begin; set _pc_ok false; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _pl true; end # refused: nothing ran
-        test "$_pl" = true; or _run sudo -n paccache -ruk0; or begin; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and test "$_pc_ok" = true; and set _pl half; set _pc_ok false; end # half: -rk2 ran, sudo refused -ruk0
+        _run sudo -n paccache -rk2; or begin; set _pc_ok false; _sudo_refused; and set _pl true; end # refused: nothing ran
+        test "$_pl" = true; or _run sudo -n paccache -ruk0; or begin; _sudo_refused; and test "$_pc_ok" = true; and set _pl half; set _pc_ok false; end # half: -rk2 ran, sudo refused -ruk0
         if test "$_pc_ok" = true
             _phase_record "Finalize: pacman cache trim" PASS "paccache -rk2 + -ruk0 ($_reason)"
         else
@@ -3170,7 +3177,7 @@ function _if_trim_pacman_cache --description "Trim pacman cache: paccache -rk2 t
             _phase_record "Finalize: pacman cache trim" PASS "pacman -Sc ($_reason)"
         else
             set -l _w "failed (pacman -Sc)"; set -l _c "pacman -Sc failed"; set -l _k PACMAN_CACHE_TRIM_FAIL
-            string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _w "not run (sudo cache lapsed)"; set _c "pacman -Sc not run (sudo cache lapsed)"; set _k PACMAN_CACHE_TRIM_LAPSE; end # sudo refused it
+            _sudo_refused; and begin; set _w "not run (sudo cache lapsed)"; set _c "pacman -Sc not run (sudo cache lapsed)"; set _k PACMAN_CACHE_TRIM_LAPSE; end # sudo refused it
             _warn "pacman cache trim $_w"; _log "$_k: tool=pacman-Sc"; _phase_record "Finalize: pacman cache trim" WARN "$_c"
         end
     end
@@ -3229,9 +3236,8 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     _info "NetworkManager will restart (D-Bus disconnect expected)"
     if not _run sudo -n systemctl restart -- NetworkManager.service
         set -l _why "restart failed (will recover on reboot)"; set -l _cell "restart failed (will recover on reboot)"; set -l _key NM_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed) — applies on reboot"; set _cell "not run (sudo cache lapsed); applies on reboot"; set _key NM_RESTART_LAPSE; end # sudo refused it
-        _warn "NetworkManager $_why"; _log "$_key: context=finalize"
-        _phase_record "Finalize: NetworkManager restart" WARN "$_cell"
+        _sudo_refused; and begin; set _why "restart not run (sudo cache lapsed) — applies on reboot"; set _cell "not run (sudo cache lapsed); applies on reboot"; set _key NM_RESTART_LAPSE; end # sudo refused it
+        _warn "NetworkManager $_why"; _log "$_key: context=finalize"; _phase_record "Finalize: NetworkManager restart" WARN "$_cell"
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end
@@ -3306,9 +3312,8 @@ function _rrp_optional_indexer --argument-names cmd label --description "_rdi_ru
     if _run sudo -n $cmd $flag
         _phase_record "Packages: $label" PASS "ok"
     else
-        set -l _why "failed (non-fatal)"; string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _why "not run (sudo cache lapsed)"
-        _warn "$label $_why"; _log "INDEXER_FAIL: cmd=$cmd ($_why)"
-        _phase_record "Packages: $label" WARN "$_why"
+        set -l _why "failed (non-fatal)"; set -l _key INDEXER_FAIL; _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key INDEXER_LAPSE; end
+        _warn "$label $_why"; _log "$_key: cmd=$cmd ($_why)"; _phase_record "Packages: $label" WARN "$_why"
     end
 end
 function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/services phases"
@@ -3500,8 +3505,7 @@ end
 function _ry_do_install_file --argument-names target --description "Install a single named config file (caller-canonicalized path)"
     _log_section "INSTALL-FILE START"; set -l _use_sudo (_idf_use_sudo_for_dst "$target")
     if test -z "$_use_sudo"
-        _err "Not a managed file: $target"
-        _info "Managed files:"
+        _err "Not a managed file: $target"; _info "Managed files:"
         for dst in $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _echo "  $dst"; end
         _log_section "INSTALL-FILE END"; return $EXIT_USAGE
     end
@@ -3548,7 +3552,7 @@ end
 # ── POST-HOOKS: BOOT (BOOT, CMDLINE, LOADER; TAINT GATE → CASCADE → ENTRIES → SANITY) ──
 function _pb_cascade_fail --argument-names step target --description "_pb_rebuild_cascade sub: ERR + log a cascade step that failed or that sudo refused"
     set -l _why failed; set -l _key POST_BOOT_REBUILD_FAIL; set -l _ls $step; string match -q -- '* *' $step; and set _ls "'$step'"
-    string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_BOOT_REBUILD_LAPSE; end # sudo refused it
+    _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_BOOT_REBUILD_LAPSE; end # sudo refused it
     _err "$step $_why"; _log "$_key: step=$_ls target=$target"
 end
 function _pb_rebuild_cascade --argument-names target skip_mki --description "_post_boot_apply sub: mkinitcpio -P + sdboot-manage gen + bootctl update"
@@ -3582,7 +3586,7 @@ function _post_loader --argument-names target --description "Post-hook: sdboot-m
 function _post_resolved --argument-names target --description "Post-hook: restart systemd-resolved"
     if not _run sudo -n systemctl restart -- systemd-resolved.service
         set -l _why "restart failed"; set -l _key POST_RESOLVED_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed)"; set _key POST_RESOLVED_RESTART_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "restart not run (sudo cache lapsed)"; set _key POST_RESOLVED_RESTART_LAPSE; end # sudo refused it
         _warn "systemd-resolved $_why — drop-in applies at next boot (non-fatal; file deployed)"; _log "$_key: target=$target"; return 0
     end
     _ok "systemd-resolved restarted — drop-in applied"
@@ -3593,7 +3597,7 @@ function _post_logind --argument-names target --description "Post-hook: notify l
 function _post_nmdispatch --argument-names target --description "Post-hook: daemon-reload after NetworkManager-dispatcher logging drop-in change"
     if not _run sudo -n systemctl daemon-reload
         set -l _why failed; set -l _key POST_NMDISPATCH_RELOAD_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_NMDISPATCH_RELOAD_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_NMDISPATCH_RELOAD_LAPSE; end # sudo refused it
         _warn "systemctl daemon-reload $_why — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
         _log "$_key: target=$target"; return 0
     end
@@ -3614,7 +3618,7 @@ function _post_nm --argument-names target --description "Post-hook: restart Netw
         _ok "NetworkManager restarted — drop-in applied"; _pending_apply_drop "$target" # applied: a later run owes nothing
     else
         set -l _why "restart failed"; set -l _key POST_NM_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "restart not run (sudo cache lapsed)"; set _key POST_NM_RESTART_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "restart not run (sudo cache lapsed)"; set _key POST_NM_RESTART_LAPSE; end # sudo refused it
         _warn "NetworkManager $_why — config applies on next reboot (non-fatal; file deployed)"; _log "$_key: target=$target"
     end
     return 0
@@ -3628,10 +3632,10 @@ function _post_sysctl --argument-names target --description "Post-hook: apply sy
     if test "$_sc_rc" -ne 0
         set -l _why "a sysctl.d key failed; the keys that loaded are live"; set -l _next "  Fix or drop the key sysctl rejected above, then: sudo sysctl --system"
         set -l _nr false; test "$_sc_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_sc_rc" 124 137; and set _nr true # no capture dir, timeout or kill
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and set _nr true # sudo refused it
         test "$_nr" = true; and begin; set _why "it did not run or finish, so the tunables apply at next boot"; set _next "  Retry: sudo sysctl --system"; end
-        _warn "sysctl --system failed (rc=$_sc_rc) — $_why (non-fatal; file deployed)"
-        _info "$_next"; _log "POST_SYSCTL_APPLY_FAIL: target=$target rc=$_sc_rc"; return 0
+        set -l _w "failed (rc=$_sc_rc)"; set -l _key POST_SYSCTL_APPLY_FAIL; _sudo_refused; and begin; set _w "not run (sudo cache lapsed)"; set _key POST_SYSCTL_APPLY_LAPSE; set _why "the tunables apply at next boot"; set _next "  Retry: sudo sysctl --system"; end # sudo refused it
+        _warn "sysctl --system $_w — $_why (non-fatal; file deployed)"
+        _info "$_next"; _log "$_key: target=$target rc=$_sc_rc"; return 0
     end
     _ok "sysctl tunables applied (sysctl --system)"; return 0
 end
@@ -3683,7 +3687,7 @@ function _post_cpupower --argument-names target --description "Post-hook: restar
     end
     if not _run sudo -n systemctl restart -- cpupower.service
         set -l _why failed; set -l _key POST_CPUPOWER_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_CPUPOWER_RESTART_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_CPUPOWER_RESTART_LAPSE; end # sudo refused it
         _warn "cpupower.service restart $_why — governor change applies on next boot (non-fatal; file deployed)"
         _info "  Governor from /etc/default/cpupower-service.conf re-applies on next boot"; _log "$_key: target=$target"; return 0
     end
@@ -3704,14 +3708,15 @@ function _post_nft --argument-names target --description "Post-hook: validate, t
         _log "POST_NFT_VALIDATE_TIMEOUT: target=$target rc=$_nc_rc"; return 0
     end
     if test "$_nc_rc" -ne 0
-        _warn "nft -c failed on the deployed /etc/nftables.conf (it passed before the write: sudo lapse or environment) — not reloaded; reboot, or retry: sudo nft -c -f /etc/nftables.conf && sudo systemctl restart nftables.service"
-        _log "POST_NFT_VALIDATE_FAIL: target=$target"; return 0
+        set -l _w "failed on the deployed /etc/nftables.conf (it passed before the write: environment)"; set -l _key POST_NFT_VALIDATE_FAIL; _sudo_refused; and begin; set _w "not run (sudo cache lapsed)"; set _key POST_NFT_VALIDATE_LAPSE; end # sudo refused it
+        _warn "nft -c $_w — not reloaded; reboot, or retry: sudo nft -c -f /etc/nftables.conf && sudo systemctl restart nftables.service"
+        _log "$_key: target=$target"; return 0
     end
     if _run sudo -n systemctl restart -- nftables.service # oneshot re-runs nft -f (no ExecReload)
         _ok "nftables ruleset applied (systemctl restart — oneshot re-runs nft -f)"
     else
         set -l _why failed; set -l _key POST_NFT_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_NFT_RESTART_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_NFT_RESTART_LAPSE; end # sudo refused it
         _warn "nftables restart $_why — validated ruleset applies when the service next starts (reboot); retry: sudo systemctl restart nftables.service"
         _log "$_key: target=$target"
     end
@@ -3723,7 +3728,7 @@ function _post_regdom --argument-names target --description "Post-hook: apply wi
         case PASS
             _ok "Wireless regdom $COUNTRY applied (iw reg set)"; _log "POST_REGDOM_APPLY_OK: target=$target"
         case WARN
-            _log "POST_REGDOM_APPLY_FAIL: target=$target"
+            set -l _key POST_REGDOM_APPLY_FAIL; string match -q -- 'sudo cache lapsed*' "$_RY_REGDOM_EVIDENCE"; and set _key POST_REGDOM_APPLY_LAPSE; _log "$_key: target=$target"
         case DEFER
             _log "POST_REGDOM_SKIP_NO_IW: target=$target"
     end
@@ -3738,7 +3743,7 @@ function _post_bluetooth --argument-names target --description "Post-hook: try-r
         _ok "bluetooth.service try-restarted (restarts only if running)"
     else
         set -l _why failed; set -l _key POST_BT_RESTART_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_BT_RESTART_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_BT_RESTART_LAPSE; end # sudo refused it
         _warn "bluetooth.service try-restart $_why — config applies on next reboot (non-fatal; file deployed)"; _log "$_key: target=$target"
     end
     return 0
@@ -3750,9 +3755,10 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     _resolve_systemd_ver
     if set -q _RY_SYSTEMD_VER; and test "$_RY_SYSTEMD_VER" -ge 254 # udevadm verify landed in v254
         _run sudo -n udevadm verify -- "$target"; set -l _uv_rc $status
-        if test "$_uv_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_uv_rc" 124 137; or begin; test "$_uv_rc" -ne 0; and string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; end # no capture dir, timeout(1), a kill or a sudo lapse: no verdict
-            _warn "udevadm verify gave no verdict for $target (rc=$_uv_rc) — not reloaded or re-triggered, but udevd re-reads changed rules on its next event; retry: sudo udevadm verify $target"
-            _log "POST_UDEV_VERIFY_NORUN: target=$target rc=$_uv_rc"; return 0
+        if test "$_uv_rc" -eq "$EXIT_RUN_TMPFAIL"; or contains -- "$_uv_rc" 124 137; or begin; test "$_uv_rc" -ne 0; and _sudo_refused; end # no capture dir, timeout(1), a kill or a sudo lapse: no verdict
+            set -l _w "gave no verdict for $target (rc=$_uv_rc)"; set -l _key POST_UDEV_VERIFY_NORUN; _sudo_refused; and begin; set _w "not run for $target (sudo cache lapsed)"; set _key POST_UDEV_VERIFY_LAPSE; end # sudo refused it
+            _warn "udevadm verify $_w — not reloaded or re-triggered, but udevd re-reads changed rules on its next event; retry: sudo udevadm verify $target"
+            _log "$_key: target=$target rc=$_uv_rc"; return 0
         end
         if test "$_uv_rc" -ne 0
             _warn "udevadm verify failed for $target — devices not re-triggered, but udevd re-reads changed rules on its next event: fix its generator in both scripts, then re-run "(string escape -- (string replace -r -- '^(?!.*/)' ./ (status filename)))" --install-file $target"
@@ -3765,7 +3771,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
     end
     if not _run sudo -n udevadm control --reload-rules
         set -l _why failed; set -l _key POST_UDEV_RELOAD_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_UDEV_RELOAD_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_UDEV_RELOAD_LAPSE; end # sudo refused it
         _warn "udevadm control --reload-rules $_why — udevd re-reads changed rules on its next event; existing devices update at next boot (non-fatal; file deployed)"
         _info "  Retry: sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=block --subsystem-match=cpu --action=change"
         _log "$_key: target=$target"; return 0
@@ -3774,7 +3780,7 @@ function _post_udev --argument-names target --description "Post-hook: reload ude
         _ok "udev rules reloaded; block and cpu devices re-triggered"
     else
         set -l _why failed; set -l _key POST_UDEV_TRIGGER_FAIL
-        string match -q -- 'sudo: *' $_RY_RUN_ERR_CAP[1]; and not sudo -n true 2>/dev/null; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_UDEV_TRIGGER_LAPSE; end # sudo refused it
+        _sudo_refused; and begin; set _why "not run (sudo cache lapsed)"; set _key POST_UDEV_TRIGGER_LAPSE; end # sudo refused it
         _warn "udevadm trigger $_why — scheduler/EPP apply at next boot or device event"; _log "$_key: target=$target"
     end
     return 0

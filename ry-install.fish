@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.270.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.271.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.270.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.271.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -405,6 +405,7 @@ function _dc_sweep_tmpfiles --description "_dc_settle sub: Remove tracked tmpfil
         end
     end
     set -l _has_sudo false; test (count $_stuck_tmpfiles) -gt 0; and command -q sudo; and sudo -n true 2>/dev/null; and set _has_sudo true
+    set -l _stuck_why "outside escalation paths"; test "$_has_sudo" = true; or begin; set _stuck_why "no sudo"; command -q sudo; and set _stuck_why "sudo cache lapsed"; end
     set -l _esc_roots /run/ry-install # escalation roots = dest parents + /run/ry-install
     for _d in $SYSTEM_DESTINATIONS; set -a _esc_roots (command dirname -- "$_d"); end
     set -l _run_esc false
@@ -421,7 +422,7 @@ function _dc_sweep_tmpfiles --description "_dc_settle sub: Remove tracked tmpfil
                 end
             end
         else
-            not set -q _FOOTER_WRITTEN; and _log "TMPFILE_STUCK: $_tf (no sudo or outside escalation paths)"
+            not set -q _FOOTER_WRITTEN; and _log "TMPFILE_STUCK: $_tf ($_stuck_why)"
         end
     end
     test "$_run_esc" = true; and sudo -n rmdir /run/ry-install 2>/dev/null # reclaim empty snapshot dir
@@ -446,7 +447,7 @@ function _dc_erase_globals --description "_do_cleanup sub: Erase cached globals"
     set --erase _RY_PROFILE_USES_WIFI_BACKEND _RY_ESP_FALLBACK _RY_ESP_VIA _RY_BOOT_VIA _RY_ESP_LAYOUT _RY_BOOT_LAPSE_NAMED
     set --erase _RY_MKI_REVERT_FAILED _RY_MKI_REVERTED _RY_ADD_EXPLICIT_OK _RY_ADD_EXPLICIT_WARNED _RY_PACTREE_MISSING_WARNED _RY_REALPATH_ABSENT_WARNED _RY_MKI_SNAP_TRY
     set --erase _RY_RUN_TIMEOUT_WARNED _RY_RUN_TIMEOUT_CLAMPED _PROG_CLOCK _PROG_NOW_LAST _RY_HOLDS_LOCK _RY_LOCK_DIR_OWNED _RY_LOCK_MKDIR_OK _RY_LOCK_REC _RY_LOCK_CLAIM
-    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK _RY_ENABLE_START_FAILS _RY_PKG_REMOVE_HOOK_ERR
+    set --erase _RY_PKG_REMOVE_SKIPS _RY_BOOT_TAINTED _RY_PKGS_REMOVED_COUNT _RY_PKG_REMOVE_DBLOCK _RY_PKG_REMOVE_LAPSE _RY_ENABLE_START_FAILS _RY_PKG_REMOVE_HOOK_ERR
     set --erase _RY_ENABLE_FAILS _RY_ENABLE_MISSING _RY_MASK_STOP_FAILS _RY_MASK_FAILS _RY_NFT_FIRST_ENABLED
     set --erase _RY_PHASE_RESULTS _RY_DEPLOY_CHANGED_COUNT _RY_DEPLOY_IDEMPOTENT_COUNT _RY_DEPLOY_CHANGED_DSTS _RY_BOOT_CRIT_HIT _RY_DEPLOY_TAG _RY_BOOT_REFUSED _RY_BOOT_INFLIGHT _RY_BOOT_CRIT_PENDING _RY_PKG_INFLIGHT _RY_PKG_PAST_PREPARE _RY_NM_RESTART_DEFERRED
     set --erase _RY_PKG_FAIL_EV _RY_PKG_SWAP_EV _RY_PKG_HOOK_ERR _RY_PKG_SWAP_HOOK_ERR _RY_RUN_ERR_CAP _RY_RUN_OUT_CAP _RY_SUDO_ERR _RY_PKG_ALL _RY_PKG_HELD _RY_PKG_DEP_HELD
@@ -1978,6 +1979,7 @@ function _atomic_write_file --argument-names dst perms use_sudo --description "A
     _ok "→ $dst$_tag"; return 0
 end
 function _ry_mkdir_0755 --argument-names use_sudo dir --description "Create dirs via mkdir -p with umask pinned at 0022 (ry-verify rejects group-writable dirs)"
+    test -d "$dir"; and return 0 # an existing parent needs no mkdir, so no sudo call to lapse
     set -l _pmk 022; set -q umask; and set _pmk $umask; set -g umask 0022
     if test "$use_sudo" = true
         _run sudo -n mkdir -p -m 0755 -- "$dir"
@@ -2247,7 +2249,7 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
     set -l _q_pre (command pacman -Q 2>/dev/null | command sha256sum 2>/dev/null | string match -rg -- '^(\S+)'); test "$pipestatus[1]" -eq 0; or set _q_pre "" # name+version fingerprint; empty pre/post = fail-open true
     if not _ip_syu_pass $_pacman_first
         if _sudo_refused # sudo refused the pass: a retry would be refused too
-            _taint; set --erase -g _RY_PKG_INFLIGHT; _err "Package installation not run (sudo cache lapsed) — no -Syyu retry"; set -ga _RY_PKG_FAIL_EV "-Syu refused (sudo)"
+            _taint; set --erase -g _RY_PKG_INFLIGHT; _err "Package installation not run (sudo cache lapsed) — no -Syyu retry"; set -ga _RY_PKG_FAIL_EV "-Syu not run (sudo)"
             _ip_seed_revert; return 1
         end
         _warn_loud_cont "Package installation failed — retrying with forced db re-sync (handles transient mirror staleness; will not resolve a conflict no missing member pulls — see JSONL log for the failed pass's output)..." # loud: install pins QUIET; the retry's outcome counts it once
@@ -2258,7 +2260,7 @@ function _ip_pacman_invoke --description "_ip_run_and_verify sub: Run full pacma
             if test -f /var/lib/pacman/db.lck
                 _err "pacman database became locked during install — aborting"; set -ga _RY_PKG_FAIL_EV "pacman db locked mid-run"
             else if _sudo_refused # sudo refused the retry: pacman never ran
-                _err "Package installation failed — the -Syyu retry never ran (sudo cache lapsed)"; set -ga _RY_PKG_FAIL_EV "-Syu failed; -Syyu refused (sudo)"
+                _err "Package installation failed — the -Syyu retry never ran (sudo cache lapsed)"; set -ga _RY_PKG_FAIL_EV "-Syu failed; -Syyu not run (sudo)"
             else
                 _err "Package installation failed after retry"; set -ga _RY_PKG_FAIL_EV "-Syu and -Syyu retry failed"
             end
@@ -2322,7 +2324,8 @@ function _install_packages --description "Install managed packages via pacman -S
         set --erase _RY_DEPLOY_TAG; _taint; _err_cont "Failed to pre-deploy mkinitcpio.conf before package install"
         _err_cont "Aborting package installation — mkinitcpio.conf must be in place before -Syu"
         _ip_seed_revert # landed bytes go back (a match no-ops); Configuration holds the file
-        _ip_snapshot_settle; _phase_record "Packages: pacman -Syu" FAIL "mkinitcpio.conf pre-deploy failed"; return 1
+        _ip_snapshot_settle; set -l _c "mkinitcpio.conf pre-deploy failed"; sudo -n true 2>/dev/null; or set _c "mkinitcpio.conf pre-deploy not run (sudo)"
+        _phase_record "Packages: pacman -Syu" FAIL "$_c"; return 1
     end
     set --erase _RY_DEPLOY_TAG
     if test "$_RY_DEPLOY_CHANGED_COUNT" = "$_seed_n"; and test -n "$_RY_MKI_BACKUP_FILE"; set -l _snap "$_RY_MKI_BACKUP_FILE"; set -g _RY_MKI_BACKUP_FILE ""; set -g _RY_MKI_HAD_ORIG false; _rm_tmp "$_snap" true; _log "MKINITCPIO_SNAPSHOT_DROPPED: seed unchanged (nothing to roll back)"; end
@@ -2590,6 +2593,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
         _pacman_hook_errors "PKGS_DEL removal" _RY_PKG_REMOVE_HOOK_ERR PKG_REMOVE_HOOK_ERROR; return 0
     end
     if test -f /var/lib/pacman/db.lck; _err "pacman database became locked during removal — aborting"; set -g INSTALL_HAD_ERRORS true; set -g _RY_PKG_REMOVE_DBLOCK true; _log "PKG_REMOVE_BATCH_FAIL_DBLOCK: $argv"; return 0; end
+    if _sudo_refused; _warn "PKGS_DEL removal not run (sudo cache lapsed) — no per-package retry"; set -g _RY_PKG_REMOVE_LAPSE true; _log "PKG_REMOVE_BATCH_LAPSE: $argv"; return 0; end # a retry is refused too
     _msg_nocount WARN "Batch removal failed — retrying individually to identify failures" # each package the retry fails counts
     _log "PKG_REMOVE_BATCH_FAIL: $argv"; set -l _retry_installed (command pacman -Qq 2>/dev/null)
     if test "$status" -ne 0; _warn "pacman -Qq failed during retry — aborting per-pkg removal"; _log "PKG_REMOVE_RETRY_QQ_FAIL: pacman -Qq returned non-zero"; return 0; end
@@ -2629,7 +2633,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         _log "PKG_REMOVE_HELD: boot state tainted (Boot refuses its rebuild; a removal would trigger one via pacman hooks)"
         _phase_record "Services: PKGS_DEL removal" SKIP "held: boot state tainted this run"; return 0
     end
-    set -g _RY_PKG_REMOVE_SKIPS; set -g _RY_PKGS_REMOVED_COUNT 0; set -g _RY_PKG_REMOVE_DBLOCK false; set -g _RY_PKG_REMOVE_HOOK_ERR false; set -l to_del
+    set -g _RY_PKG_REMOVE_SKIPS; set -g _RY_PKGS_REMOVED_COUNT 0; set -g _RY_PKG_REMOVE_DBLOCK false; set -g _RY_PKG_REMOVE_LAPSE false; set -g _RY_PKG_REMOVE_HOOK_ERR false; set -l to_del
     set -l _del_installed (command pacman -Qq 2>/dev/null)
     if test "$status" -ne 0 # -Q takes no db.lck: a local-db read error; empty would misreport
         _warn "pacman -Qq failed (local database read error) — skipping PKGS_DEL removal"; _log "PKG_REMOVE_QQ_FAIL: pacman -Qq returned non-zero"
@@ -2649,6 +2653,8 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     if test "$_del_count" -gt 0; _log "PKG_REMOVE_REQUESTED: $to_del"; _csp_remove_pkgs $to_del; end
     if test "$_RY_PKG_REMOVE_DBLOCK" = true
         _phase_record "Services: PKGS_DEL removal" FAIL "pacman db locked — 0 of $_del_count removed"
+    else if test "$_RY_PKG_REMOVE_LAPSE" = true
+        set -l _lw "not run (sudo cache lapsed)"; test "$_skip_count" -gt 0; and set _lw "$_lw, $_skip_count $_skw"; _phase_record "Services: PKGS_DEL removal" WARN "$_lw"
     else if test "$_del_count" -eq 0; and test "$_skip_count" -eq 0
         _phase_record "Services: PKGS_DEL removal" "--" "no PKGS_DEL members installed"
     else if test "$_del_count" -eq 0
@@ -2657,7 +2663,8 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         set -l _hk "removed $_RY_PKGS_REMOVED_COUNT of $_del_count, pacman hook error"; test "$_skip_count" -gt 0; and set _hk "$_hk, $_skip_count $_skw"
         _phase_record "Services: PKGS_DEL removal" WARN "$_hk"
     else if test "$_RY_PKGS_REMOVED_COUNT" -lt "$_del_count"
-        set -l _rm_ev "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"; test "$_skip_count" -gt 0; and set _rm_ev "$_rm_ev, $_skip_count $_skw"
+        set -l _rm_ev "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"; sudo -n true 2>/dev/null; or set _rm_ev "$_rm_ev (sudo cache lapsed)"
+        test "$_skip_count" -gt 0; and set _rm_ev "$_rm_ev, $_skip_count $_skw"
         _phase_record "Services: PKGS_DEL removal" WARN "$_rm_ev"
     else if test "$_skip_count" -gt 0
         _phase_record "Services: PKGS_DEL removal" WARN "removed $_RY_PKGS_REMOVED_COUNT, $_skip_count $_skw"
@@ -2779,6 +2786,10 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     if _run sudo -n systemctl mask --now -- $_to_mask
         _phase_record "Services: mask units" $_res "masked $_mask_count unit(s)$_held"; return 0
     end
+    if _sudo_refused # sudo refused the batch: a per-unit retry is refused too
+        _err "Unit mask not run (sudo cache lapsed) — no per-unit retry"; _log "MASK_BATCH_LAPSE: $_to_mask"
+        _phase_record "Services: mask units" FAIL "not run (sudo cache lapsed)$_held; units: $_to_mask"; return 1
+    end
     _msg_nocount WARN "Batch mask failed — retrying individually to identify failures" # each unit the retry fails counts
     _log "MASK_BATCH_FAIL: $_to_mask"; _csm_retry_individual $_to_mask; set -l _rc $status
     if test "$_rc" -eq 0; and test (count $_RY_MASK_STOP_FAILS) -gt 0
@@ -2786,7 +2797,8 @@ function _configure_services_mask --description "Apply MASK list; batch-mask wit
     else if test "$_rc" -eq 0
         _phase_record "Services: mask units" $_res "$_mask_count masked (retry)$_held"
     else
-        set -l _sf ""; test (count $_RY_MASK_STOP_FAILS) -gt 0; and set _sf "; "(count $_RY_MASK_STOP_FAILS)" unstopped"; _phase_record "Services: mask units" FAIL "failed$_held$_sf; units: $_RY_MASK_FAILS"
+        set -l _mw failed; sudo -n true 2>/dev/null; or set _mw "failed (sudo cache lapsed)"
+        set -l _sf ""; test (count $_RY_MASK_STOP_FAILS) -gt 0; and set _sf "; "(count $_RY_MASK_STOP_FAILS)" unstopped"; _phase_record "Services: mask units" FAIL "$_mw$_held$_sf; units: $_RY_MASK_FAILS"
     end
     return $_rc
 end
@@ -2808,10 +2820,14 @@ function _cse_collect_units --description "Collect system units to enable"
     end
     test (count $_enable) -gt 0; and printf '%s\n' $_enable
 end
-function _cse_batch_enable --description "Batch enable system units"
+function _cse_batch_enable --description "Batch enable system units (rc 2: sudo cache lapsed)"
     set -g _RY_ENABLE_START_FAILS; set -g _RY_ENABLE_FAILS # the enable row names them: start fails WARN, enable fails FAIL
     test (count $argv) -eq 0; and return 0
     _run sudo -n systemctl enable --now -- $argv; and return 0
+    if _sudo_refused # sudo refused the batch: a per-unit retry is refused too
+        _err "Unit enable not run (sudo cache lapsed) — no per-unit retry"; _log "ENABLE_BATCH_LAPSE: $argv"
+        set -g INSTALL_HAD_ERRORS true; set -ga _RY_ENABLE_FAILS $argv; return 2
+    end
     _msg_nocount WARN "Batch enable failed — retrying individually to identify failures" # each unit the retry fails counts
     _log "ENABLE_BATCH_FAIL: $argv"; set -l _ret 0
     for _unit in $argv
@@ -2854,7 +2870,9 @@ function _configure_services_enable --description "Batch-enable system units (pe
     test "$_enable_count" -gt 0; and _log "ENABLE_PRE_ENABLED: $_pre_en/$_enable_count already enabled"
     _cse_batch_enable $_units; set -l _be $status; _cse_start_preset $_units # after the batch: it resets the lists the row reads
     if test "$_be" -ne 0
-        set -l _sf ""; test (count $_RY_ENABLE_START_FAILS) -gt 0; and set _sf "; "(count $_RY_ENABLE_START_FAILS)" unstarted"; _phase_record "Services: enable units" FAIL "enable failed$_sf; units: $_RY_ENABLE_FAILS"
+        set -l _ew "enable failed"; sudo -n true 2>/dev/null; or set _ew "enable failed (sudo cache lapsed)"
+        test "$_be" -eq 2; and set _ew "not run (sudo cache lapsed)" # rc 2: sudo refused the batch
+        set -l _sf ""; test (count $_RY_ENABLE_START_FAILS) -gt 0; and set _sf "; "(count $_RY_ENABLE_START_FAILS)" unstarted"; _phase_record "Services: enable units" FAIL "$_ew$_sf; units: $_RY_ENABLE_FAILS"
         set _ret 1
     else if test (count $_RY_ENABLE_START_FAILS) -gt 0
         _phase_record "Services: enable units" WARN "enabled, not started: $_RY_ENABLE_START_FAILS"
@@ -2890,7 +2908,7 @@ function _install_configure_services --description "Phase 4: fstab opts, resolve
     if _install_fstab_opts
         _phase_record "Services: fstab opts" "$_RY_FSTAB_RESULT" "$_RY_FSTAB_EVIDENCE"
     else
-        _phase_record "Services: fstab opts" FAIL "see JSONL log"; set _ret 1
+        set -l _fe "see JSONL log"; sudo -n true 2>/dev/null; or set _fe "sudo cache lapsed — see JSONL log"; _phase_record "Services: fstab opts" FAIL "$_fe"; set _ret 1
     end
     _configure_services_resolved_restart; _configure_services_pkg_remove; _configure_services_mask; or set _ret 1; _configure_services_enable; or set _ret 1
     _apply_wireless_regdom; _phase_record "Services: regdom" "$_RY_REGDOM_RESULT" "$_RY_REGDOM_EVIDENCE"; return $_ret
@@ -3126,7 +3144,7 @@ function _irb_taint_gate --description "_install_rebuild_boot sub: Verify mkinit
     _check_boot_taint_gate; set -l _gate_rc $status; test "$_gate_rc" -eq 0; and return 0
     _boot_refuse_mark # the gate set it too; kept for this caller
     if test "$_gate_rc" -eq 1
-        _phase_record "Boot: mkinitcpio -P" SKIP "mkinitcpio.conf revert failed"
+        set -l _c "mkinitcpio.conf revert failed"; sudo -n true 2>/dev/null; or set _c "mkinitcpio.conf revert not run (sudo)"; _phase_record "Boot: mkinitcpio -P" SKIP "$_c"
     else
         _phase_record "Boot: mkinitcpio -P" SKIP "boot state tainted by an earlier phase"
     end
@@ -3148,7 +3166,10 @@ function _install_rebuild_boot --description "Regenerate initramfs and bootloade
     set -l _sb_rc $status; test "$_sb_rc" -ne 0; and set -g _RY_BOOT_CRIT_PENDING true; set --erase _RY_BOOT_INFLIGHT # rebuild done: sanity reads only, as _post_boot_apply
     if test "$_sb_rc" -ne 0; _phase_record "Boot: post-rebuild sanity" SKIP "aborted"; return $_sb_rc; end
     _irb_verify_entries "$_boot"
-    if not _boot_sanity; set -g _RY_BOOT_CRIT_PENDING true; _err_cont "CRITICAL: Boot sanity failed — aborting remaining steps"; _phase_record "Boot: post-rebuild sanity" FAIL "see JSONL log"; return $EXIT_BOOT_CRIT; end
+    if not _boot_sanity
+        set -g _RY_BOOT_CRIT_PENDING true; _err_cont "CRITICAL: Boot sanity failed — aborting remaining steps"
+        set -l _c "see JSONL log"; sudo -n true 2>/dev/null; or set _c "sudo cache lapsed — see JSONL log"; _phase_record "Boot: post-rebuild sanity" FAIL "$_c"; return $EXIT_BOOT_CRIT
+    end
     _phase_record "Boot: post-rebuild sanity" PASS "vmlinuz+initramfs+entries OK"; return 0
 end
 
@@ -3334,7 +3355,8 @@ function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/service
         _phase_record "Configuration: file deployment" $_cfg_res "$_cfg_ev"
     else
         set -g INSTALL_HAD_ERRORS true
-        _phase_record "Configuration: file deployment" FAIL "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent, see JSONL"
+        set -l _dw "see JSONL"; sudo -n true 2>/dev/null; or set _dw "sudo cache lapsed"
+        _phase_record "Configuration: file deployment" FAIL "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent, $_dw"
     end
     _pending_apply_save # owed restarts outlive a run that stops before making them
     _install_configure_services; or set -g INSTALL_HAD_ERRORS true; test "$INSTALL_HAD_ERRORS" = true; and return 1

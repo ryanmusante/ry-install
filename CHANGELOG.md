@@ -3,20 +3,18 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.272.0
+7.273.0
 -------
 
-  - services: after sudo refused the pacman -D re-mark, the PKGS_DEL removal
-    is not tried and no longer says it removes without -s
-  - services: after sudo refused the enable batch, no package-preset unit
-    start is tried; each still reads not started (sudo cache lapsed)
-  - readme: the SDL ignore list item says proton-cachyos wayland keeps it
-    only with PROTON_NO_STEAMINPUT=0 and sdlinput always drops it
-  - readme: the LINUX_FALLBACK_OPTIONS item says systemd-boot-manager 22
-    writes each managed token twice and no fallback entry
+  - consistency: --help, the root refusal, the ESP fallback warning and the
+    ufw.service withheld WARN drop sentence periods, as other messages do
+  - consistency: next-boot hints no longer read on reboot or next reboot; the
+    NetworkManager restart row and WARN read as the resolved ones do
+  - consistency: messages read Bootloader, refusing to install and pacman
+    signature checks may fail; the no-NetworkManager WARN names one config
 
 
-7.246.0 - 7.271.0
+7.246.0 - 7.272.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -246,6 +244,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     refused reads not run, with no per-item retry
   - services: 7.271.0 the PKGS_DEL removal, mask, enable and fstab rows name
     the lapsed cache when a retry or the fstab rewrite ran into it
+  - services: 7.272.0 after sudo refused the pacman -D re-mark, the PKGS_DEL
+    removal is not tried and no longer says it removes without -s
+  - services: 7.272.0 after sudo refused the enable batch, no package-preset
+    unit start is tried; each still reads not started (sudo cache lapsed)
   - boot: 7.250.0 an empty loader entries directory no longer adds
     sdboot-manage gen or LINUX_OPTIONS hints before the banner
   - boot: 7.250.0 the loader-entry boundary check resolves symlinks as root
@@ -363,7 +365,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - logging: 7.258.0 POSTWRITE_RESTORE_STALE only when an older copy exists;
     an unmanaged nftables.service logs NFT_PRE_ENABLE_UNMANAGED
   - logging: 7.260.0 an invalid or clamped RY_RUN_TIMEOUT counts a footer warn
-  - logging: 7.260.0 a ~/ry-install dir moded to 0700 logs STATE_DIR_PERM_FIX;
+  - logging: 7.260.0 a ~/ry-install dir reset to 0700 logs STATE_DIR_PERM_FIX;
     one that stays wrong names the state tree in its ERR, not the log tree
   - logging: 7.260.0 an ESP layout refusal logs ESP_LAYOUT_REFUSED
   - logging: 7.260.0 sudo-refused steps log PRESET_START_LAPSE,

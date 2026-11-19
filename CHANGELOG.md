@@ -3,28 +3,20 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.271.0
+7.272.0
 -------
 
-  - configuration: an existing parent directory is not re-created with sudo,
-    so a lapse there names the refused mktemp, not a failed mkdir
-  - configuration: the file deployment FAIL row names the lapsed cache, not
-    see JSONL, when the sudo ticket is gone
-  - packages: the -Syu row reads not run (sudo), not refused, when sudo
-    refused the -Syu pass or its -Syyu retry
-  - packages: a mkinitcpio.conf pre-deploy that sudo refused reads not run
-    (sudo) in the -Syu row, not failed
-  - services: a PKGS_DEL removal, mask or enable batch that sudo refused reads
-    not run, with no per-item retry
-  - services: the PKGS_DEL removal, mask, enable and fstab rows name the
-    lapsed cache when a retry or the fstab rewrite ran into it
-  - boot: a mkinitcpio.conf revert that sudo refused reads not run (sudo) in
-    the mkinitcpio -P row; a sanity FAIL row names the lapsed cache
-  - logging: TMPFILE_STUCK tells a lapsed sudo cache from a missing sudo or a
-    path outside the escalation roots
+  - services: after sudo refused the pacman -D re-mark, the PKGS_DEL removal
+    is not tried and no longer says it removes without -s
+  - services: after sudo refused the enable batch, no package-preset unit
+    start is tried; each still reads not started (sudo cache lapsed)
+  - readme: the SDL ignore list item says proton-cachyos wayland keeps it
+    only with PROTON_NO_STEAMINPUT=0 and sdlinput always drops it
+  - readme: the LINUX_FALLBACK_OPTIONS item says systemd-boot-manager 22
+    writes each managed token twice and no fallback entry
 
 
-7.246.0 - 7.270.0
+7.246.0 - 7.271.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -58,6 +50,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mode repair that sudo refused names the lapsed cache
   - configuration: 7.270.0 a temp-file write that sudo refused names the
     lapsed cache
+  - configuration: 7.271.0 an existing parent directory is not re-created
+    with sudo, so a lapse there names the refused mktemp, not a failed mkdir
+  - configuration: 7.271.0 the file deployment FAIL row names the lapsed
+    cache, not see JSONL, when the sudo ticket is gone
   - packages: 7.246.0 a missing member whose dependency conflicts with an
     installed package is held for the swap
   - packages: 7.246.0 a conflict swap gets a summary row naming what it
@@ -96,6 +92,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     mktemp, cp, cmp, chmod, chown or mv reads not run, naming the conf at risk
   - packages: 7.270.0 a mkinitcpio.conf snapshot probe that sudo refused
     WARNs that rollback is unavailable; it no longer logs the file as absent
+  - packages: 7.271.0 the -Syu row reads not run (sudo), not refused, when
+    sudo refused the -Syu pass or its -Syyu retry
+  - packages: 7.271.0 a mkinitcpio.conf pre-deploy that sudo refused reads
+    not run (sudo) in the -Syu row, not failed
   - guard: 7.247.0 an early exit keeps a ~/ry-install/backups it did not
     create; inherited mkinitcpio rollback variables never drive a revert
   - guard: 7.250.0 state inherited from the environment or config.fish is
@@ -242,6 +242,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     ufw flush reads not probed, not as a ruleset not confirmed live
   - services: 7.270.0 an fstab awk/tee rewrite, chmod or chown --reference, or
     findmnt --verify that sudo refused reads not run, naming the lapsed cache
+  - services: 7.271.0 a PKGS_DEL removal, mask or enable batch that sudo
+    refused reads not run, with no per-item retry
+  - services: 7.271.0 the PKGS_DEL removal, mask, enable and fstab rows name
+    the lapsed cache when a retry or the fstab rewrite ran into it
   - boot: 7.250.0 an empty loader entries directory no longer adds
     sdboot-manage gen or LINUX_OPTIONS hints before the banner
   - boot: 7.250.0 the loader-entry boundary check resolves symlinks as root
@@ -261,6 +265,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     line, auto-* skipped); an unmounted /boot reads fstype=none
   - boot: 7.267.0 a full install's rebuild step that sudo refused logs not
     run, not failed, as its summary row reads
+  - boot: 7.271.0 a mkinitcpio.conf revert that sudo refused reads not run
+    (sudo) in the mkinitcpio -P row; a sanity FAIL row names the lapsed cache
   - finalize: 7.252.0 without PowerDevil, an environment.d change skips the
     re-apply; 7.254.0 an NM_RESTART_DELAY ending in a newline reads as 3 s
   - finalize: 7.255.0 the matrix Next line points at ./ry-verify.fish in the
@@ -375,6 +381,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     snapshot probe or revert that sudo refused logs _LAPSE, not _FAIL
   - logging: 7.270.0 a regdom, sysctl, nft -c or udevadm verify post-hook step
     that sudo refused logs _LAPSE
+  - logging: 7.271.0 TMPFILE_STUCK tells a lapsed sudo cache from a missing
+    sudo or a path outside the escalation roots
   - progress: 7.254.0 a signal while the bar pins or unpins no longer leaves
     the scroll region set or clears the top row
   - summary: 7.247.0 failed summary or banner writes log STDERR_WRITE_FAIL

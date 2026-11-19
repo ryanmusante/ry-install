@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.271.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.272.0 — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.271.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.272.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -2587,7 +2587,10 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
         set -g _RY_PKG_REMOVE_DBLOCK true; return 0
     end
     set -l _rm_op -Rns # -s cascade only once PKGS_ADD reads explicit
-    if not _mark_pkgs_add_explicit; set _rm_op -Rn; _msg_nocount WARN "  PKGS_ADD not confirmed explicit — removing without -s (orphaned deps kept)"; _log "PKG_REMOVE_NO_CASCADE: -Rn (PKGS_ADD re-mark failed)"; end # its -D failure warned
+    if not _mark_pkgs_add_explicit # its -D failure warned
+        if _sudo_refused; _warn "PKGS_DEL removal not run (sudo cache lapsed)"; set -g _RY_PKG_REMOVE_LAPSE true; _log "PKG_REMOVE_BATCH_LAPSE: $argv"; return 0; end # the batch is refused too
+        set _rm_op -Rn; _msg_nocount WARN "  PKGS_ADD not confirmed explicit — removing without -s (orphaned deps kept)"; _log "PKG_REMOVE_NO_CASCADE: -Rn (PKGS_ADD re-mark failed)"
+    end
     if _csp_pacman_rm $_rm_op --noconfirm -- $argv
         _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv))
         _pacman_hook_errors "PKGS_DEL removal" _RY_PKG_REMOVE_HOOK_ERR PKG_REMOVE_HOOK_ERROR; return 0
@@ -2664,8 +2667,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
         _phase_record "Services: PKGS_DEL removal" WARN "$_hk"
     else if test "$_RY_PKGS_REMOVED_COUNT" -lt "$_del_count"
         set -l _rm_ev "removed $_RY_PKGS_REMOVED_COUNT of $_del_count"; sudo -n true 2>/dev/null; or set _rm_ev "$_rm_ev (sudo cache lapsed)"
-        test "$_skip_count" -gt 0; and set _rm_ev "$_rm_ev, $_skip_count $_skw"
-        _phase_record "Services: PKGS_DEL removal" WARN "$_rm_ev"
+        test "$_skip_count" -gt 0; and set _rm_ev "$_rm_ev, $_skip_count $_skw"; _phase_record "Services: PKGS_DEL removal" WARN "$_rm_ev"
     else if test "$_skip_count" -gt 0
         _phase_record "Services: PKGS_DEL removal" WARN "removed $_RY_PKGS_REMOVED_COUNT, $_skip_count $_skw"
     else
@@ -2849,16 +2851,16 @@ function _cse_batch_enable --description "Batch enable system units (rc 2: sudo 
     end
     return $_ret
 end
-function _cse_start_preset --description "_configure_services_enable sub: Start a package-preset unit that is enabled but not running"
+function _cse_start_preset --argument-names batch_rc --description "_configure_services_enable sub: Start a package-preset unit that is enabled but not running"
     for _u in $_RY_PKG_MANAGED_SERVICES
-        contains -- "$_u" $EXPECTED_SERVICES; or continue; contains -- "$_u" $argv; and continue # argv: the batch's units, reported there
+        contains -- "$_u" $EXPECTED_SERVICES; or continue; contains -- "$_u" $argv[2..]; and continue # argv[2..]: the batch's units, reported there
         set -l _st (command systemctl is-enabled -- "$_u" 2>/dev/null | string trim --); test "$_st" = enabled; or continue # the preset branch skipped only these
         set -l _act (command systemctl show --value --property=ActiveState -- "$_u" 2>/dev/null); contains -- "$_act" active activating reloading refreshing; and continue
-        if _run sudo -n systemctl start -- "$_u" # start only: the package preset already enabled it
+        if test "$batch_rc" != 2; and _run sudo -n systemctl start -- "$_u" # start only: the package preset already enabled it
             _ok "Started: $_u (enabled by its package preset; was $_act)"; _log "PRESET_START_OK: unit=$_u was=$_act"
         else
             set -l _why "failed to start"; set -l _hint "will activate on next boot if config is fixed"; set -l _key PRESET_START_FAIL
-            _sudo_refused; and begin; set _why "not started (sudo cache lapsed)"; set _hint "starts at next boot"; set _key PRESET_START_LAPSE; end # sudo refused it
+            test "$batch_rc" = 2; or _sudo_refused; and begin; set _why "not started (sudo cache lapsed)"; set _hint "starts at next boot"; set _key PRESET_START_LAPSE; end # sudo refused it, or the batch (rc 2): no start ran
             _warn_loud "Enabled but $_why: $_u ($_hint)" # loud: install pins QUIET
             test "$_key" = PRESET_START_FAIL; and _warn_loud_cont "  Diagnose: systemctl status $_u; journalctl -u $_u -b"; _log "$_key: unit=$_u was=$_act"; set -ga _RY_ENABLE_START_FAILS "$_u"
         end
@@ -2868,10 +2870,10 @@ function _configure_services_enable --description "Batch-enable system units (pe
     set -l _ret 0; set -l _units (_cse_collect_units); set -l _enable_count (count $_units); set -l _pre_en 0 # already enabled: enable --now only re-asserts them
     for _u in $_units; test "$_u" = nftables.service; and set -q _RY_NFT_FIRST_ENABLED; and continue; command systemctl is-enabled --quiet -- $_u 2>/dev/null; and set _pre_en (math $_pre_en + 1); end # nftables-first enabled it this run
     test "$_enable_count" -gt 0; and _log "ENABLE_PRE_ENABLED: $_pre_en/$_enable_count already enabled"
-    _cse_batch_enable $_units; set -l _be $status; _cse_start_preset $_units # after the batch: it resets the lists the row reads
+    _cse_batch_enable $_units; set -l _be $status; _cse_start_preset $_be $_units # after the batch: it resets the lists the row reads
     if test "$_be" -ne 0
-        set -l _ew "enable failed"; sudo -n true 2>/dev/null; or set _ew "enable failed (sudo cache lapsed)"
-        test "$_be" -eq 2; and set _ew "not run (sudo cache lapsed)" # rc 2: sudo refused the batch
+        set -l _ew "enable failed"; test "$_be" -eq 2; and set _ew "not run (sudo cache lapsed)" # rc 2: sudo refused the batch
+        test "$_be" -ne 2; and not sudo -n true 2>/dev/null; and set _ew "$_ew (sudo cache lapsed)"
         set -l _sf ""; test (count $_RY_ENABLE_START_FAILS) -gt 0; and set _sf "; "(count $_RY_ENABLE_START_FAILS)" unstarted"; _phase_record "Services: enable units" FAIL "$_ew$_sf; units: $_RY_ENABLE_FAILS"
         set _ret 1
     else if test (count $_RY_ENABLE_START_FAILS) -gt 0
@@ -3354,8 +3356,7 @@ function _rdi_run_phases --description "_ry_do_install sub: Run pkgs/sys/service
         test "$_RY_MKI_REVERTED" = true; and set _cfg_res WARN; and set _cfg_ev "$_cfg_ev, mkinitcpio.conf held" # seed rollback stands: -Syu failed or was skipped
         _phase_record "Configuration: file deployment" $_cfg_res "$_cfg_ev"
     else
-        set -g INSTALL_HAD_ERRORS true
-        set -l _dw "see JSONL"; sudo -n true 2>/dev/null; or set _dw "sudo cache lapsed"
+        set -g INSTALL_HAD_ERRORS true; set -l _dw "see JSONL"; sudo -n true 2>/dev/null; or set _dw "sudo cache lapsed"
         _phase_record "Configuration: file deployment" FAIL "$_RY_DEPLOY_CHANGED_COUNT deployed, $_RY_DEPLOY_IDEMPOTENT_COUNT idempotent, $_dw"
     end
     _pending_apply_save # owed restarts outlive a run that stops before making them

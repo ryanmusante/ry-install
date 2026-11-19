@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.271.0** · [Changelog](CHANGELOG.md)
+**Version 7.272.0** · [Changelog](CHANGELOG.md)
 
 Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -199,7 +199,7 @@ New values reach programs started after the next graphical login; a running Stea
 - `POWERDEVIL_NO_DDCUTIL=1` — PowerDevil DDC/CI off; silences `org_kde_powerdevil` i2c errors
 - `PROTON_LOCAL_SHADER_CACHE=1` — per-game shader cache
 - `RADV_PERFTEST=nggc,nircache` — RADV NGG culling (opt-in on GFX11+) and the per-stage NIR cache; a per-title `RADV_PERFTEST=` replaces both
-- `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030,0x3434/0x0b00` — SDL games skip the Keychron K2 HE, Link receiver, and Q0 HE joystick interfaces; needs Steam Input off per title, and `PROTON_NO_STEAMINPUT=0` under proton-cachyos `sdlinput`/`wayland`
+- `SDL_GAMECONTROLLER_IGNORE_DEVICES=0x3434/0x0e20,0x3434/0xd030,0x3434/0x0b00` — SDL games skip the Keychron K2 HE, Link receiver, and Q0 HE joystick interfaces; needs Steam Input off per title; under proton-cachyos, `wayland` keeps the list only with `PROTON_NO_STEAMINPUT=0`, and `sdlinput` always drops the list
 - `VKD3D_DEBUG=none` — vkd3d logging off
 - `VKD3D_SHADER_DEBUG=none` — vkd3d shader logging off
 - `WINEDEBUG=-all` — Wine debug channels off
@@ -254,7 +254,7 @@ Adding or dropping a token means editing `KERNEL_PARAMS` in both scripts and its
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters but `quiet`, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters but `quiet`, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds. From `systemd-boot-manager` 22, `sdboot-manage` writes no fallback entry and ignores this key, building each entry from `/etc/kernel/cmdline` plus `LINUX_OPTIONS`, so the `options` line carries every managed token twice — harmless, since both copies hold the same value and `ry-verify` checks only presence.
 - `timeout 0` with `default @saved` — with no saved entry (fresh ESP), systemd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
 
 ## BIOS

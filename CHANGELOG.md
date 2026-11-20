@@ -3,6 +3,15 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
+7.276.0
+-------
+
+  - lock: a symlinked lock directory, dangling or not, is refused as a
+    symlink, not as a failed mkdir, a pidfile with no PID or a stale claim
+  - consistency: the dispatcher reload and WirePlumber OKs name what their
+    WARNs do; RY_RUN_TIMEOUT WARNs give seconds as --help does (3600 s)
+
+
 7.275.0
 -------
 

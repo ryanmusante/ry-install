@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.275.0 (2026-11-19) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.276.0 (2026-11-20) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.275.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.276.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -304,7 +304,7 @@ function _acquire_lock_fresh --description "Try fresh atomic-mkdir lock"
     test "$_mk_rc" -eq 0; and set -g _RY_LOCK_MKDIR_OK true # a signal lands right after mkdir: release then rmdirs (empty-only)
     set -g umask $_prev_umask
     if test "$_mk_rc" -ne 0
-        set --erase _RY_LOCK_DIR_OWNED; test -d "$LOCK_DIR"; and return 2
+        set --erase _RY_LOCK_DIR_OWNED; test -d "$LOCK_DIR"; or test -L "$LOCK_DIR"; and return 2 # a symlink, even dangling, meets the symlink refusal
         _log "LOCK_MKDIR_FAIL: $LOCK_DIR rc=$_mk_rc"; echo "[ERR] Cannot create lock directory: $LOCK_DIR (mkdir rc=$_mk_rc)" >&2; return 1
     end
     command chmod -- 00700 "$LOCK_DIR" 2>/dev/null # 5 digits: GNU chmod keeps a dir's setgid on '700'
@@ -363,8 +363,8 @@ function _acquire_lock --description "Acquire instance lock"
             command sleep 0.2 </dev/null 2>/dev/null; set _rec (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --)
         end
         if test -z "$_rec"; and not test -e "$LOCK_DIR"; and not test -L "$LOCK_DIR"; _acquire_lock_fresh; set -l _g_rc $status; test "$_g_rc" -eq 0; and return 0; test "$_g_rc" -eq 2; and continue; return 1; end # holder released mid-pass: retry the mkdir
+        if test -L "$LOCK_DIR"; _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; echo "[ERR] Lock directory is a symlink — refusing to reclaim: $LOCK_DIR" >&2; return 1; end # before the pidfile is judged
         _al_reclaimable "$_rec" $_reclaim_attempt; or return 1
-        if test -L "$LOCK_DIR"; _log "LOCK_RECLAIM_REFUSED: $LOCK_DIR is a symlink"; echo "[ERR] Lock directory is a symlink — refusing to reclaim: $LOCK_DIR" >&2; return 1; end
         set -l _recheck (command cat -- "$LOCK_FILE" 2>/dev/null | string trim --) # re-read right before the claim
         if test -z "$_recheck"; and not test -e "$LOCK_DIR"; and not test -L "$LOCK_DIR"; _acquire_lock_fresh; set -l _g_rc $status; test "$_g_rc" -eq 0; and return 0; test "$_g_rc" -eq 2; and continue; return 1; end # holder released mid-pass: retry the mkdir
         if test "$_recheck" != "$_rec"; _log "LOCK_RECLAIM_ABORT: pidfile changed mid-pass ('$_rec' → '$_recheck') — another instance active"; echo "[ERR] Lock pidfile changed mid-reclaim — another instance active: $LOCK_DIR" >&2; return 1; end
@@ -1311,7 +1311,7 @@ function _run_resolve_timeout --description "_run_effective_timeout and _fstab_a
         if test (string length -- (string replace -r '^0+(?=.)' '' -- "$RY_RUN_TIMEOUT")) -gt 9 # fish math overflows past 2^53; >9 significant digits ≈ 31 y — clamp
             if not set -q _RY_RUN_TIMEOUT_CLAMPED
                 set -g _RY_RUN_TIMEOUT_CLAMPED true
-                _warn_loud "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' exceeds 9 digits — using 2147483647" # install pins QUIET
+                _warn_loud "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' exceeds 9 digits — using 2147483647 s" # install pins QUIET
                 _log "RY_RUN_TIMEOUT_CLAMPED: value=$RY_RUN_TIMEOUT — using 2147483647"
             end
             echo 2147483647; return 0
@@ -1321,7 +1321,7 @@ function _run_resolve_timeout --description "_run_effective_timeout and _fstab_a
     if not set -q _RY_RUN_TIMEOUT_WARNED
         set -g _RY_RUN_TIMEOUT_WARNED true
         set -l _v (string escape -- "$RY_RUN_TIMEOUT" | string replace -ra -- '[\x00-\x1f\x7f-\x9f\x{f680}-\x{f6ff}]' '?') # quoted only where needed; C1 prints as ?, a raw byte as \XHH
-        _warn_loud "RY_RUN_TIMEOUT=$_v is invalid (expected non-negative integer; 0 to disable) — using default $_RY_RUN_TIMEOUT_DEFAULT""s" # install pins QUIET
+        _warn_loud "RY_RUN_TIMEOUT=$_v is invalid (expected non-negative integer; 0 to disable) — using default $_RY_RUN_TIMEOUT_DEFAULT s" # install pins QUIET
         _log "RY_RUN_TIMEOUT_INVALID: value=$RY_RUN_TIMEOUT — using default $_RY_RUN_TIMEOUT_DEFAULT"
     end
     echo $_RY_RUN_TIMEOUT_DEFAULT
@@ -3640,7 +3640,7 @@ function _post_nmdispatch --argument-names target --description "Post-hook: daem
         _warn "systemctl daemon-reload $_why — dispatcher LogLevelMax applies at next boot (non-fatal; file deployed)"
         _log "$_key: target=$target"; return 0
     end
-    _ok "systemd daemon-reload done — nm-dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX applies at its next activation"; return 0
+    _ok "systemctl daemon-reload done — dispatcher LogLevelMax=$NM_DISPATCHER_LOGLEVELMAX applies at its next activation"; return 0
 end
 function _post_nm --argument-names target --description "Post-hook: restart NetworkManager; deferred when Wi-Fi is active route"
     if not command -q NetworkManager
@@ -3713,7 +3713,7 @@ function _post_wireplumber --argument-names target --description "Post-hook: try
         _warn "wireplumber.service restart failed — bluez5.roles applies at next login (non-fatal; file deployed)"; _log "POST_WIREPLUMBER_RESTART_FAIL: target=$target"
         return 0
     end
-    _ok "WirePlumber try-restarted (restarts only if running) — bluez5.roles applies as it starts"
+    _ok "wireplumber.service try-restarted (restarts only if running) — bluez5.roles applies as it starts"
     _pending_apply_drop "$target" # applied: a later run owes nothing
     return 0
 end

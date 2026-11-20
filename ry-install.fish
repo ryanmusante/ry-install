@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.274.0 (2026-11-19) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.275.0 (2026-11-19) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.274.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.275.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -328,7 +328,7 @@ end
 function _al_reclaimable --argument-names rec attempt --description "_acquire_lock sub: True when the pidfile names a dead or reused PID (live or no PID: refuse)"
     set -l _stale_pid (string match -rg '^([1-9]\d*)(?: \S+)?$' -- "$rec"); set -l _id (string match -rg '^\d+ (\S+)$' -- "$rec") # no _id: bare-PID pidfile (<= 7.232.0)
     if test -z "$_stale_pid" # fail-closed: unreadable pidfile may be a live peer mid-install
-        _log "LOCK_PIDFILE_UNREADABLE: '$rec' not a PID after settle — refusing reclaim (fail-closed)"
+        _log "LOCK_PIDFILE_UNREADABLE: '$rec' not a PID after settle — refusing to reclaim (fail-closed)"
         echo "[ERR] Lock pidfile holds no PID — refusing to reclaim: $LOCK_DIR (if no instance is running: rm -rf --preserve-root -- "(string escape -- "$LOCK_DIR")")" >&2; return 1
     end
     set -l _reuse # live PID that is not the recorded holder
@@ -697,71 +697,71 @@ function _ir_validate_counts --description "Refuse to deploy when array counts d
         MKINITCPIO_COMPRESSION_OPTIONS:1 # drift tripwires; sync arrays + docs on change
     for _kv in $_expect
         set -l _parts (string split -m1 ':' -- "$_kv"); set -l _name $_parts[1]; set -l _want $_parts[2]; set -l _got (count $$_name)
-        if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test "$_got" -ne "$_want"; _err_loud "$_name count drift: got=$_got expected=$_want — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 function _ir_validate_keys --description "Refuse to deploy on out-of-domain embedded keys and tokens; warn on dual-stack"
     for _k in BT_AUTO_ENABLE BT_FAST_CONNECTABLE BLACKLIST_AMDXDNA
-        if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$$_k" true false; _err_loud "$_k must be true|false (got: '$$_k') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in SDBOOT_OVERWRITE SDBOOT_REMOVE_EXISTING SDBOOT_REMOVE_OBSOLETE RESOLVED_MDNS RESOLVED_LLMNR
-        if not contains -- "$$_k" yes no; _err_loud "$_k must be yes|no (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$$_k" yes no; _err_loud "$_k must be yes|no (got: '$$_k') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in LOADER_TIMEOUT BT_RECONNECT_ATTEMPTS
-        if not string match -qr '^\d+\z' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr '^\d+\z' -- "$$_k"; _err_loud "$_k must be a non-negative integer (got: '$$_k') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    if not string match -qr '^[0-3]\z' -- "$NM_WIFI_POWERSAVE"; _err_loud "NM_WIFI_POWERSAVE must be 0|1|2|3 (got: '$NM_WIFI_POWERSAVE') — refuse to deploy (NetworkManager wifi.powersave accepts no other value)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if not string match -qr '^[A-Z][A-Z]\z' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)\z' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
-    if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
-    if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if not string match -qr '^[0-3]\z' -- "$NM_WIFI_POWERSAVE"; _err_loud "NM_WIFI_POWERSAVE must be 0|1|2|3 (got: '$NM_WIFI_POWERSAVE') — refusing to deploy (NetworkManager wifi.powersave accepts no other value)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if not string match -qr '^[A-Z][A-Z]\z' -- "$COUNTRY"; _err_loud "COUNTRY must be an ISO-3166-1 alpha-2 code (got: '$COUNTRY') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if string match -qr '^(AA|Q[M-Z]|X[A-Z]|ZZ)\z' -- "$COUNTRY"; _err_loud "COUNTRY '$COUNTRY' is in the ISO-3166-1 user-assigned/reserved range (AA, QM-QZ, XA-XZ, ZZ) — not a real country code; would silently fall back to world regdomain; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if not contains -- "$GPU_DPM_LEVEL" $_RY_DPM_LEVELS; _err_loud "GPU_DPM_LEVEL must be one of "(string join '|' -- $_RY_DPM_LEVELS)" (got: '$GPU_DPM_LEVEL') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
+    if not contains -- "$EPP_PREFERENCE" $_RY_EPP_LEVELS; _err_loud "EPP_PREFERENCE must be one of "(string join '|' -- $_RY_EPP_LEVELS)" (got: '$EPP_PREFERENCE') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end # value is interpolated unquoted into udev ATTR
     for _r in $WP_BLUEZ_ROLES # spliced unquoted into SPA-JSON
-        if not contains -- "$_r" $_RY_BLUEZ_ROLES; _err_loud "WP_BLUEZ_ROLES entries must be among "(string join '|' -- $_RY_BLUEZ_ROLES)" (got: '$_r') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$_r" $_RY_BLUEZ_ROLES; _err_loud "WP_BLUEZ_ROLES entries must be among "(string join '|' -- $_RY_BLUEZ_ROLES)" (got: '$_r') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
-    if not string match -qr '^[a-z][a-z0-9_-]*\z' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\\z (got: '$CPUPOWER_GOVERNOR') — refuse to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if not string match -qr '^[a-z][a-z0-9_-]*\z' -- "$CPUPOWER_GOVERNOR"; _err_loud "CPUPOWER_GOVERNOR must match ^[a-z][a-z0-9_-]*\\z (got: '$CPUPOWER_GOVERNOR') — refusing to deploy (the domain _grep_cpupower_entry accepts)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     if contains -- /etc/nftables.conf $SYSTEM_DESTINATIONS; and not contains -- ipv6.disable=1 $KERNEL_PARAMS # base ICMPv6 is accepted; service rules are not
         _warn_loud "Dual-stack: the ruleset accepts only the ICMPv6 base set — add service-specific IPv6 rules to _content__etc_nftables.conf in both scripts and re-run (a hand edit to the managed /etc/nftables.conf is overwritten)" # loud: install pins QUIET
     end
     if test "$BLACKLIST_AMDXDNA" = false; and begin; contains -- amd_iommu=off $KERNEL_PARAMS; or contains -- iommu=off $KERNEL_PARAMS; end # amdxdna probes -ENODEV without the IOMMU; iommu=off disables AMD-Vi
-        _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off / iommu=off; set iommu=pt) — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
+        _err_loud "BLACKLIST_AMDXDNA=false requires the IOMMU (drop amd_iommu=off / iommu=off; set iommu=pt) — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
     for _k in LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR SDBOOT_DEFAULT_ENTRY NM_WIFI_BACKEND NM_LOG_LEVEL NM_DISPATCHER_LOGLEVELMAX MKINITCPIO_COMPRESSION
-        if test -z "$$_k"; _err_loud "$_k must be non-empty — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test -z "$$_k"; _err_loud "$_k must be non-empty — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     set -l _scalar_metachar_re '[\s"`$;\\\\&|<>(){}*?\x27~!#]' # shell metachar class for scalars written to boot configs
     for _k in MKINITCPIO_COMPRESSION SDBOOT_DEFAULT_ENTRY LOADER_DEFAULT LOADER_CONSOLE_MODE LOADER_EDITOR
-        if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metacharacter: '$$_k' — refuse to deploy (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if string match -qr -- "$_scalar_metachar_re" "$$_k"; _err_loud "$_k contains whitespace, quote, or shell metacharacter: '$$_k' — refusing to deploy (would corrupt a shell-sourced or parser-read boot config)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _co in $MKINITCPIO_COMPRESSION_OPTIONS # spliced into a shell array literal; flag charset only
-        if not string match -qr -- '^-?[A-Za-z0-9]+\z' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refuse to deploy (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr -- '^-?[A-Za-z0-9]+\z' "$_co"; _err_loud "MKINITCPIO_COMPRESSION_OPTIONS token invalid: '$_co' — refusing to deploy (spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _kp in $KERNEL_PARAMS # spliced into boot configs; charset excludes shell metachars
-        if not string match -qr -- '^[A-Za-z0-9._,=-]+\z' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refuse to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr -- '^[A-Za-z0-9._,=-]+\z' "$_kp"; _err_loud "KERNEL_PARAMS token invalid: '$_kp' — refusing to deploy (spliced into a shell-sourced boot config and the kernel cmdline)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _mt in $MKINITCPIO_MODULES $MKINITCPIO_HOOKS # plain names (no ? marker): presence checks take them literally
-        if not string match -qr -- '^[A-Za-z0-9_-]+\z' "$_mt"; _err_loud "MKINITCPIO_MODULES/HOOKS token invalid: '$_mt' — refuse to deploy (plain names only; spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -qr -- '^[A-Za-z0-9_-]+\z' "$_mt"; _err_loud "MKINITCPIO_MODULES/HOOKS token invalid: '$_mt' — refusing to deploy (plain names only; spliced into a shell-sourced array literal)"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 function _ir_validate_sets --description "Refuse to deploy when add and remove sets contradict each other"
     for _p in $PKGS_ADD # phase 2 installs, phase 4 -Rns removes: verify would assert both
-        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both PKGS_ADD and PKGS_DEL — phase 4 would remove what phase 2 installed; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _p in $EXPECTED_VULKAN_PKGS # phase 2 installs a missing one, as it does PKGS_ADD
-        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both EXPECTED_VULKAN_PKGS and PKGS_DEL — phase 4 would remove what phase 2 installed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_p" $PKGS_DEL; _err_loud "'$_p' is in both EXPECTED_VULKAN_PKGS and PKGS_DEL — phase 4 would remove what phase 2 installed; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _u in $EXPECTED_SERVICES # phase 4 masks before it enables: enable would fail
-        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and EXPECTED_SERVICES — phase 4 masks before it enables; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _u in $_RY_PKG_MANAGED_SERVICES
-        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if contains -- "$_u" $MASK; _err_loud "'$_u' is in both MASK and _RY_PKG_MANAGED_SERVICES — a masked unit cannot be package-managed; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 function _ir_validate_change_keys --description "Refuse to deploy when a change-key or boot-critical literal is not a managed destination" # restarts, PowerDevil, .ry.bak, boot taint
     for _k in /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf /etc/NetworkManager/conf.d/99-cachyos-nm.conf "$HOME/.config/environment.d/10-environment.conf" "$HOME/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf"
-        if not contains -- "$_k" $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _err_loud "'$_k' keys a phase restart but is not a managed destination — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$_k" $SYSTEM_DESTINATIONS $USER_DESTINATIONS; _err_loud "'$_k' keys a phase restart but is not a managed destination — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _k in $_RY_BOOT_CRITICAL_DSTS # backup, post-write verify and boot taint key on these
-        if not contains -- "$_k" $SYSTEM_DESTINATIONS; _err_loud "'$_k' is boot-critical but not a managed system destination — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not contains -- "$_k" $SYSTEM_DESTINATIONS; _err_loud "'$_k' is boot-critical but not a managed system destination — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 
@@ -799,11 +799,11 @@ function _init_runtime --description "Cache root UUID + CPU-model gate + validat
     _ir_validate_counts; _ir_validate_keys; _ir_validate_sets; _ir_validate_post_hooks; _ir_validate_change_keys
     for _bt in $_RY_BACKUP_TARGETS
         string match -qr -- '/(sysctl|environment)\.d/' "$_bt"; or continue
-        _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
+        _err_loud "_RY_BACKUP_TARGETS member '$_bt' uses a side-effecting content generator — _awf_postwrite_verify_restore re-run would mutate run state; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT
     end
     _ir_precompute_caches
     for _pn in $PKGS_ADD $PKGS_DEL $EXPECTED_VULKAN_PKGS
-        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag; refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if string match -q -- '-*' "$_pn"; _err_loud "Package name starts with dash: '$_pn' — pacman would parse as flag; refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 
@@ -884,7 +884,7 @@ function _content__etc_sysctl.d_95-ry-overrides.conf --description "Generate con
     set -l _printed 0; set -g _RY_SYSCTL_BAD_ENTRIES
     for entry in $SYSCTL_VALUES
         if not string match -qr '^\s*[A-Za-z0-9._-]+\s*=\s*\S' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; _log "SYSCTL_SKIP_MALFORMED: '$entry' (require key=value, key charset [A-Za-z0-9._-])"; continue; end
-        if string match -qr '[\x00-\x1f\x7f]' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; _log "SYSCTL_SKIP_CTRLCHAR: entry contains control character (newline/CR/etc) — refuse to emit"; continue; end
+        if string match -qr '[\x00-\x1f\x7f]' -- "$entry"; set -ga _RY_SYSCTL_BAD_ENTRIES "$entry"; _log "SYSCTL_SKIP_CTRLCHAR: entry contains control character (newline/CR/etc) — refusing to emit"; continue; end
         set -l parts (string split -m1 '=' -- "$entry"); set -l key (string trim -- "$parts[1]"); set -l val (string trim -- "$parts[2]")
         printf '%s = %s\n' "$key" "$val"; set _printed (math $_printed + 1)
     end
@@ -921,7 +921,7 @@ function _content_HOME_.config_environment.d_10-environment.conf --description "
     set -l _printed 0; set -g _RY_ENVD_BAD_ENTRIES
     for var in $ENV_VARS
         if not string match -qr '^[A-Za-z_][A-Za-z0-9_]*=' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; _log "ENVD_SKIP_MALFORMED: '$var' (require KEY=value, KEY charset [A-Za-z_][A-Za-z0-9_]*)"; continue; end
-        if string match -qr '[\x00-\x1f\x7f]' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; _log "ENVD_SKIP_CTRLCHAR: entry contains control character (newline/CR/etc) — refuse to emit"; continue; end
+        if string match -qr '[\x00-\x1f\x7f]' -- "$var"; set -ga _RY_ENVD_BAD_ENTRIES "$var"; _log "ENVD_SKIP_CTRLCHAR: entry contains control character (newline/CR/etc) — refusing to emit"; continue; end
         printf '%s\n' "$var"; set _printed (math $_printed + 1)
     end
     if test "$_printed" -ne (count $ENV_VARS); _log "ENVD_COUNT_MISMATCH: printed=$_printed expected="(count $ENV_VARS); return $EXIT_GEN_ENVD; end
@@ -1398,7 +1398,7 @@ end
 function _run --description "Execute a command with logging, stdout/stderr capture, and timeout enforcement"
     set -g _RY_RUN_ERR_CAP; set -g _RY_RUN_OUT_CAP # per call, before any early return: no reader sees a stale capture
     if test (count $argv) -eq 0; _log "BUG: _run called with no arguments"; return $EXIT_RUN_MISUSE; end
-    if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing"; return $EXIT_RUN_MISUSE; end
+    if string match -q -- '-*' "$argv[1]"; _log "BUG: _run called with dash-prefixed argv[1]='$argv[1]' — refusing to run it"; return $EXIT_RUN_MISUSE; end
     set -l log_cmd (_run_redact_cmd $argv); _log "RUN: $log_cmd"; set -l _run_dir (command mktemp -d -p (_tmp_dir) "ry-run.$fish_pid.XXXXXX" 2>/dev/null)
     _track_tmpfile "$_run_dir"
     if test -z "$_run_dir"; or not test -d "$_run_dir"
@@ -2572,7 +2572,7 @@ end
 function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when no external installed rdeps; emit nothing (blocked)"
     if not command -q pactree
         if not set -q _RY_PACTREE_MISSING_WARNED
-            set -g _RY_PACTREE_MISSING_WARNED true; _warn "pactree not found (install pacman-contrib) — rdep-cascade safety bypassed for PKGS_DEL"
+            set -g _RY_PACTREE_MISSING_WARNED true; _warn "pactree not found (install pacman-contrib) — reverse-dependency safety bypassed for PKGS_DEL"
             _log "PACTREE_MISSING: pacman-contrib not installed; rdep filter disabled"
         end
         _log "PACTREE_BYPASS: pkg=$pkg emitted unfiltered (pacman -R will refuse on live rdeps)"; printf '%s\n' "$pkg"; return 0
@@ -2586,7 +2586,7 @@ function _csp_filter_rdeps --argument-names pkg --description "Emit \$pkg when n
     set -l _trimmed (string trim -- $_raw); set -l _stripped (string replace -r '[=<>].*$' '' -- $_trimmed); set -l _nonempty (string match -rv -- '^$' $_stripped); set -l _rdeps_raw (string match -rv -- "^$_pkg_re\$" $_nonempty); set -l _rdeps
     for _r in $_rdeps_raw; contains -- "$_r" $PKGS_DEL; and continue; set -a _rdeps "$_r"; end
     if test (count $_rdeps) -gt 0
-        _info "  $pkg: skipped (reverse deps: $_rdeps)"; set -ga _RY_PKG_REMOVE_SKIPS "$pkg"; return 0
+        _info "  $pkg: skipped (reverse dependencies: $_rdeps)"; set -ga _RY_PKG_REMOVE_SKIPS "$pkg"; return 0
     end
     printf '%s\n' "$pkg"
 end
@@ -2605,7 +2605,7 @@ function _csp_remove_pkgs --description "Remove pkgs via pacman -Rns, per-pkg re
     set -l _rm_op -Rns # -s cascade only once PKGS_ADD reads explicit
     if not _mark_pkgs_add_explicit # its -D failure warned
         if _sudo_refused; _warn "PKGS_DEL removal not run (sudo cache lapsed)"; set -g _RY_PKG_REMOVE_LAPSE true; _log "PKG_REMOVE_BATCH_LAPSE: $argv"; return 0; end # the batch is refused too
-        set _rm_op -Rn; _msg_nocount WARN "  PKGS_ADD not confirmed explicit — removing without -s (orphaned deps kept)"; _log "PKG_REMOVE_NO_CASCADE: -Rn (PKGS_ADD re-mark failed)"
+        set _rm_op -Rn; _msg_nocount WARN "  PKGS_ADD not confirmed explicit — removing without -s (orphaned dependencies kept)"; _log "PKG_REMOVE_NO_CASCADE: -Rn (PKGS_ADD re-mark failed)"
     end
     if _csp_pacman_rm $_rm_op --noconfirm -- $argv
         _ok "Removed: $argv"; _log "PKG_REMOVE_BATCH_OK: $argv"; set -g _RY_PKGS_REMOVED_COUNT (math $_RY_PKGS_REMOVED_COUNT + (count $argv))
@@ -2666,7 +2666,7 @@ function _configure_services_pkg_remove --description "Remove PKGS_DEL packages 
     set -l _skip_count (count $_RY_PKG_REMOVE_SKIPS); set -l _del_count (count $to_del); set -l _pf (count (string match -- '*:probe-failed' $_RY_PKG_REMOVE_SKIPS))
     set -l _skw rdep-skipped; test "$_pf" -gt 0; and set _skw skipped; and test "$_pf" -eq "$_skip_count"; and set _skw probe-failed # the row names the skip kind
     if test "$_skip_count" -gt 0
-        if string match -qv -- '*:probe-failed' $_RY_PKG_REMOVE_SKIPS; _warn "  Skipped (reverse deps held by other packages, or pactree probe failed): $_RY_PKG_REMOVE_SKIPS"; else; _msg_nocount WARN "  Skipped (pactree probe failed): $_RY_PKG_REMOVE_SKIPS"; end # rdep skips print INFO only; each probe failure warned
+        if string match -qv -- '*:probe-failed' $_RY_PKG_REMOVE_SKIPS; _warn "  Skipped (reverse dependencies held by other packages, or pactree probe failed): $_RY_PKG_REMOVE_SKIPS"; else; _msg_nocount WARN "  Skipped (pactree probe failed): $_RY_PKG_REMOVE_SKIPS"; end # rdep skips print INFO only; each probe failure warned
         _log "PKG_REMOVE_SKIPS: $_RY_PKG_REMOVE_SKIPS"
     end
     if test "$_del_count" -gt 0; _log "PKG_REMOVE_REQUESTED: $to_del"; _csp_remove_pkgs $to_del; end
@@ -3505,17 +3505,17 @@ set -g _RY_POST_HOOKS \
     "*/MangoHud/MangoHud.conf|mangohud" "*/wireplumber.conf.d/*|wireplumber"
 function _ir_validate_post_hooks --description "Refuse to deploy when a _RY_POST_HOOKS tag lacks a handler or breaks destination mirror" # mirrors _ir_validate_keys
     set -l _seen_tags; set -l _mirror_dsts $SYSTEM_DESTINATIONS $USER_DESTINATIONS; set -l _mirror_n (count $_mirror_dsts)
-    if test (count $_RY_POST_HOOKS) -ne "$_mirror_n"; _err_loud "_RY_POST_HOOKS count "(count $_RY_POST_HOOKS)" does not mirror destination count $_mirror_n — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+    if test (count $_RY_POST_HOOKS) -ne "$_mirror_n"; _err_loud "_RY_POST_HOOKS count "(count $_RY_POST_HOOKS)" does not mirror destination count $_mirror_n — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     for _i in (seq $_mirror_n)
         set -l _mparts (string split -m1 '|' -- "$_RY_POST_HOOKS[$_i]"); set -l _mpat $_mparts[1]
-        if not string match -q "$_mpat" -- "$_mirror_dsts[$_i]"; _err_loud "_RY_POST_HOOKS mirror break at index $_i: pattern '$_mpat' does not match destination '$_mirror_dsts[$_i]' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not string match -q "$_mpat" -- "$_mirror_dsts[$_i]"; _err_loud "_RY_POST_HOOKS mirror break at index $_i: pattern '$_mpat' does not match destination '$_mirror_dsts[$_i]' — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
     for _entry in $_RY_POST_HOOKS
         set -l _parts (string split -m1 '|' -- "$_entry"); set -l _tag $_parts[2]
-        if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if test -z "$_tag"; _err_loud "_RY_POST_HOOKS entry has empty tag: '$_entry' — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
         contains -- "$_tag" $_seen_tags; and continue
         set -a _seen_tags "$_tag"
-        if not functions -q "_post_$_tag"; _err_loud "_RY_POST_HOOKS tag '$_tag' has no handler '_post_$_tag' (entry '$_entry') — refuse to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
+        if not functions -q "_post_$_tag"; _err_loud "_RY_POST_HOOKS tag '$_tag' has no handler '_post_$_tag' (entry '$_entry') — refusing to deploy"; _pre_dispatch_exit $EXIT_PREFLIGHT; end
     end
 end
 function _post_hook_for_target --argument-names target --description "Return post-hook tag for a single target path" # index mirror of SYSTEM_ + USER_DESTINATIONS
@@ -3853,7 +3853,7 @@ if set -q _flag_install_file
     set -g MODE install-file; test (count $_flag_install_file) -gt 1; and _early_usage_exit "--install-file given "(count $_flag_install_file)" times — one managed file per run" # argparse collects repeats; never drop one silently
     set -l _if_val "$_flag_install_file[1]"
     test -z "$_if_val"; and _early_usage_exit "--install-file requires a non-empty absolute path"
-    if string match -qr -- '[\x00-\x1f\x7f-\x9f\x{f680}-\x{f6ff}]' "$_if_val"; _early_usage_exit "--install-file path contains a control character or a non-UTF-8 byte — refusing (no managed path has one)"; end
+    if string match -qr -- '[\x00-\x1f\x7f-\x9f\x{f680}-\x{f6ff}]' "$_if_val"; _early_usage_exit "--install-file path contains a control character or a non-UTF-8 byte — refusing to deploy (no managed path has one)"; end
     if not string match -q -- '/*' "$_if_val"
         if string match -qr -- '^--(verify|check|help|version)$' "$_if_val"
             _early_usage_exit "--install-file got the flag $_if_val as its value — pass an absolute path: --install-file <path> or --install-file=<path>"
@@ -3864,7 +3864,7 @@ if set -q _flag_install_file
         end
     end
     set -l _byte_len (printf '%s' "$_if_val" | command wc -c | string trim --)
-    if not string match -qr '^\d+$' -- "$_byte_len"; _early_usage_exit "--install-file path byte-length probe failed (wc -c returned '$_byte_len') — refusing"; end
+    if not string match -qr '^\d+$' -- "$_byte_len"; _early_usage_exit "--install-file path byte-length probe failed (wc -c returned '$_byte_len') — refusing to deploy"; end
     test "$_byte_len" -gt 4095; and _early_usage_exit "--install-file path exceeds PATH_MAX (4096 bytes with the terminating NUL)"
     for _comp in (string split / -- "$_if_val") # NAME_MAX 255 per component
         test (string length -- "$_comp") -gt 63; or continue # 63 chars of at most 4 UTF-8 bytes stay under 255: no fork

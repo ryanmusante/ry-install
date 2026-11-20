@@ -3,18 +3,28 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.273.0
+7.274.0
 -------
 
-  - consistency: --help, the root refusal, the ESP fallback warning and the
-    ufw.service withheld WARN drop sentence periods, as other messages do
-  - consistency: next-boot hints no longer read on reboot or next reboot; the
-    NetworkManager restart row and WARN read as the resolved ones do
-  - consistency: messages read Bootloader, refusing to install and pacman
-    signature checks may fail; the no-NetworkManager WARN names one config
+  - preflight: a boot-critical path that is not a managed system destination
+    refuses to deploy, as a phase change key does
+  - logging: POSTWRITE_VERIFY_FAIL logs ERR for a digest it cannot take, as
+    ry-verify's VERIFY_STATIC_MISMATCH does
+  - boot: the boot-entry path probe drops its one-value op argument
+  - consistency: the NetworkManager post-hook names its drop-in and reads
+    deployed, not installed; the nftables restart WARN reads at next boot
+  - consistency: --help groups options, exit codes, environment and files;
+    refusals read 'refusing to ...'; no '?' guesses
+  - consistency: output spells out NM, regdom, db, perms, opts, conf, dirs,
+    pkg and metachar
+  - readme: the LINUX_FALLBACK_OPTIONS item dates the doubled managed tokens
+    to systemd-boot-manager 23; 22 reads only /etc/kernel/cmdline
+  - readme: the BIOS recipe names SPL and PPT Control, the mW values and the
+    STAPM Boost Override gate
+  - readme: the network printer entry uses `<name>` and `<printer-ip>`
 
 
-7.246.0 - 7.272.0
+7.246.0 - 7.273.0
 -----------------
 
   - env: 7.248.0 SDL_GAMECONTROLLER_IGNORE_DEVICES gains 0x3434/0x0b00 (Q0 HE)
@@ -25,33 +35,27 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     replaced; 7.251.0 the 60-ry-modules.conf header claims no module options
   - configuration: 7.252.0 a sudo lapse before the atomic move FAILs the file,
     not an [ERR] line; 7.257.0 one before the temp copy is named in the FAIL
-  - configuration: 7.254.0 an nft -c that could not run refuses the deploy as
-    not run, not as a failed ruleset
-  - configuration: 7.254.0 a signal right after a config lands no longer drops
-    its owed restart, and a config that fails to land is not left owed
+  - configuration: 7.254.0 an nft -c that could not run refuses as not run
+  - configuration: 7.254.0 a landed config keeps its owed restart through a
+    signal; a failed one owes none
   - configuration: 7.255.0 an unchanged system file not owned by root:root is
-    chowned back, as a drifted mode is restored
-  - configuration: 7.256.0 WP_BLUEZ_ROLES sets bluez5.roles, no hfp_*/hsp_*
+    chowned back
+  - configuration: 7.256.0 WP_BLUEZ_ROLES sets bluez5.roles, no `hfp_*/hsp_*`
     role, in ~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf
   - configuration: 7.257.0 a boot file's post-write check compares sizes (NUL
     bytes); a sudo lapse at its restore probe prints the restore command
-  - configuration: 7.257.0 with an hfp_*/hsp_* role in WP_BLUEZ_ROLES, the
-    bluez5.roles drop-in comment no longer says there is none
-  - configuration: 7.257.0 a mode drift repair names the old mode in 0644 form
+  - configuration: 7.257.0 the bluez5.roles drop-in comment no longer denies
+    an `hfp_*/hsp_*` role; a mode drift repair names the old mode in 0644 form
   - configuration: 7.258.0 the held mkinitcpio.conf WARN no longer claims a
     rollback when the seed never landed; a revert's failed cmp gives its rc
   - configuration: 7.260.0 a boot file unreadable with sudo cached FAILs and
     restores its .ry.bak by copy then rename; the restore hint uses sudo cp
-  - configuration: 7.260.0 an nft -c or a parent-dir mkdir that ran and failed
-    as the sudo ticket expired reads as failed, not as a lapse
-  - configuration: 7.267.0 a temp-file chmod, an atomic move, or an owner or
-    mode repair that sudo refused names the lapsed cache
-  - configuration: 7.270.0 a temp-file write that sudo refused names the
-    lapsed cache
-  - configuration: 7.271.0 an existing parent directory is not re-created
-    with sudo, so a lapse there names the refused mktemp, not a failed mkdir
-  - configuration: 7.271.0 the file deployment FAIL row names the lapsed
-    cache, not see JSONL, when the sudo ticket is gone
+  - configuration: 7.260.0 an nft -c or parent-dir mkdir that failed as the
+    sudo ticket expired reads as failed, not as a lapse
+  - configuration: 7.267.0 a temp-file chmod, atomic move or owner or mode
+    repair, 7.270.0 or temp-file write, sudo refused names the lapsed cache
+  - configuration: 7.271.0 an existing parent dir is not re-created with sudo;
+    the deploy FAIL row names the lapsed cache, not see JSONL
   - packages: 7.246.0 a missing member whose dependency conflicts with an
     installed package is held for the swap
   - packages: 7.246.0 a conflict swap gets a summary row naming what it
@@ -60,40 +64,30 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     member pulling it and runs again; re-pass and -Syyu notices print
   - packages: 7.250.0 a HOOKS build script behind a 0700 /etc/initcpio/install
     no longer reads missing after -Syu; 7.251.0 sudo probes only unseen ones
-  - packages: 7.251.0 a failed pacman -Q no longer reads as an unchanged
-    package set; the run counts it as an upgrade
-  - packages: 7.251.0 a PKGS_DEL member an earlier -Rns took is logged as
-    removed; 7.252.0 a hook error past the 500-line capture reads WARN
-  - packages: 7.254.0 error lines kept from a long pacman output's elided
-    middle stay in file order, print with QUIET off, log under _OVERFLOW_KEPT
-  - packages: 7.254.0 a re-run whose mkinitcpio.conf seed changed nothing
-    drops its rollback, so a failed -Syu no longer reverts and holds the file
+  - packages: 7.251.0 a failed pacman -Q counts as an upgrade, not an
+    unchanged set; a PKGS_DEL member an earlier -Rns took is logged as removed
+  - packages: 7.252.0 a hook error past the 500-line capture reads WARN;
+    7.254.0 kept error lines stay in order and log under _OVERFLOW_KEPT
+  - packages: 7.254.0 a seed that changed nothing drops its rollback: a failed
+    -Syu no longer reverts and holds mkinitcpio.conf
   - packages: 7.255.0 a failed mkinitcpio.conf seed reverts any bytes it
     landed; 7.257.0 Configuration then holds the restored original
-  - packages: 7.255.0 a conflict-swap hook error leads its row
-  - packages: 7.255.0 a -Syyu retry, conflict swap, explicit mark, updatedb or
-    pkgfile that sudo refused reads not run
+  - packages: 7.255.0 a swap hook error leads its row; a -Syyu retry, conflict
+    swap, explicit mark, updatedb or pkgfile sudo refused reads not run
   - packages: 7.257.0 a failed install counts once in the footer; a sudo lapse
     at a HOOKS check reads as unchecked (a WARN after -Syu)
-  - packages: 7.257.1 -Syu also installs EXPECTED_VULKAN_PKGS
-  - packages: 7.257.1 an installed -git or -bin build conflicting with a
-    Vulkan driver is swapped out after -Syu, as for PKGS_ADD
+  - packages: 7.257.1 -Syu also installs EXPECTED_VULKAN_PKGS; a -git or -bin
+    build conflicting with one is swapped out, as for PKGS_ADD
   - packages: 7.258.0 -Syu names only a missing EXPECTED_VULKAN_PKGS member,
     none when pacman -Qq fails, so an IgnorePkg hold stands
   - packages: 7.258.0 a pacman run stopped by a pre-transaction hook reads as
     nothing committed; a failed conflict swap is named on the -Syu row
-  - packages: 7.267.0 a mkinitcpio.conf snapshot that sudo refused names the
-    lapsed cache, not a failed mktemp or cp
-  - packages: 7.270.0 a -Syu pass that sudo refused reads not run; no -Syyu
-    retry
-  - packages: 7.270.0 a mkinitcpio.conf revert that sudo refused at its probe,
-    mktemp, cp, cmp, chmod, chown or mv reads not run, naming the conf at risk
-  - packages: 7.270.0 a mkinitcpio.conf snapshot probe that sudo refused
-    WARNs that rollback is unavailable; it no longer logs the file as absent
-  - packages: 7.271.0 the -Syu row reads not run (sudo), not refused, when
-    sudo refused the -Syu pass or its -Syyu retry
-  - packages: 7.271.0 a mkinitcpio.conf pre-deploy that sudo refused reads
-    not run (sudo) in the -Syu row, not failed
+  - packages: 7.267.0 a mkinitcpio.conf snapshot sudo refused names the lapsed
+    cache; 7.270.0 a refused snapshot probe WARNs that rollback is unavailable
+  - packages: 7.270.0 a -Syu pass sudo refused reads not run, with no -Syyu
+    retry; a refused revert step reads not run, naming the conf at risk
+  - packages: 7.271.0 the -Syu row reads not run (sudo) when sudo refused the
+    pass, its -Syyu retry or the mkinitcpio.conf pre-deploy
   - guard: 7.247.0 an early exit keeps a ~/ry-install/backups it did not
     create; inherited mkinitcpio rollback variables never drive a revert
   - guard: 7.250.0 state inherited from the environment or config.fish is
@@ -110,9 +104,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     run; fish_read_limit is pinned, 7.258.0 to 100 MiB, 7.260.0 to 1 GiB
   - guard: 7.250.0 a universal _early_ch is no longer erased; the root check
     ignores _flag_install_file, 7.251.0 the kernel cmdline _ROOT_UUID
-  - guard: 7.264.0 an inherited fish_read_limit of a few bytes no longer
-    prints a fish error at startup or lets a piped run past its refusal
-  - guard: 7.264.0 a fish universal named _RPT_* no longer exits 3
+  - guard: 7.264.0 a few-byte inherited fish_read_limit no longer breaks
+    startup or a piped run's refusal; a universal `_RPT_*` no longer exits 3
   - signals: 7.250.0 a signal mid-banner or in any phase after a package,
     boot-critical file or mkinitcpio revert failure prints DO NOT REBOOT
   - signals: 7.250.0 an interrupted banner for a refused rebuild points at the
@@ -135,20 +128,18 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     no longer strands it; one just after its removal prints no restore command
   - signals: 7.255.0 a signal before the mkinitcpio.conf seed lands no longer
     rewrites it or WARNs; one after -Syu passes no longer reverts the seed
-  - signals: 7.257.0 when pacman dies holding its lock, the DO NOT REBOOT
-    banner says to remove the stale db.lck before -Syu
-  - signals: 7.260.0 a signal-time mkinitcpio.conf revert skipped for a sudo
-    lapse counts its WARN in the footer tally
-  - cli: 7.247.0 the --install-file control-character refusal states why
-  - cli: 7.252.0 an unexpected positional argument prints escaped, an empty
-    one as ''; 7.254.0 a root run escapes each leftover argument whole
+  - signals: 7.257.0 if pacman dies holding its lock, DO NOT REBOOT says to
+    remove db.lck; 7.260.0 a lapse-skipped signal-time revert counts a WARN
+  - cli: 7.247.0 the --install-file control-character refusal states why;
+    7.252.0 an unexpected positional prints escaped, an empty one as ''
   - cli: 7.254.0 argument errors print control characters (C1, raw bytes)
-    escaped or as ?; an --install-file value holding one is refused first
+    escaped or as ?, and a root run escapes each leftover argument whole
+  - cli: 7.254.0 an --install-file value holding a control character is
+    refused first and every --install-file error escapes the value
   - cli: 7.254.0 --install-file given --verify, --check, --report, --help or
-    --version as its value names both spellings
-  - cli: 7.254.0 every --install-file error escapes the value; a 4095-slash
-    one no longer stalls NAME_MAX; -h or -v ending in a newline exits 2
-  - cli: 7.264.0 --install-file given --report as its value reads got flag
+    --version names both spellings; 7.264.0 --report reads got flag
+  - cli: 7.254.0 a 4095-slash --install-file no longer stalls NAME_MAX; -h or
+    -v ending in a newline exits 2
   - preflight: 7.247.0 MODULES and HOOKS tokens are charset-checked; a missing
     realpath prints no fish error; a module that may not exist warns on stderr
   - preflight: 7.252.0 a HOME that normalizes to empty or a non-directory
@@ -158,7 +149,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - preflight: 7.254.0 a relative HOME, 7.255.0 or one with a control
     character, takes the passwd entry; such a passwd entry exits 3
   - preflight: 7.254.0 the root UUID takes findmnt's first match, so a mount
-    stacked on / no longer fails the run as an invalid UUID
+    stacked on / no longer fails the run
   - preflight: 7.254.0 an RY_RUN_TIMEOUT ending in a newline reads invalid and
     its WARN prints the value escaped; the network probe skips ~/.curlrc
   - preflight: 7.254.0 a TLS failure names the clock or a TLS proxy, not DNS;
@@ -178,8 +169,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     exits 3 before -Syu; true(1) and test(1) are checked at startup
   - preflight: 7.260.0 the ESP gate refuses an ESP not at /boot or an XBOOTLDR
     $BOOT; a /boot linked to the ESP gets the /boot free-space gate
-  - preflight: 7.268.0 sudo tickets tied to the parent process exit 3 at the
-    sudo gate (timestamp_type=ppid); they refused every command under timeout
+  - preflight: 7.268.0 ppid-scoped sudo tickets (timestamp_type=ppid) exit 3
+    at the sudo gate; they refused every command under timeout
   - preflight: 7.268.0 a background sudo -n true every 30 s keeps the ticket
     alive until exit, so a long -Syu no longer lapses it; sudo banner cut
   - preflight: 7.269.0 a verifypw that lets sudo -v skip authentication
@@ -192,83 +183,71 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     exits 5; 7.255.0 a lock not taken logs ERR and counts in the footer
   - backup: 7.250.0 ~/ry-install/backups is created by the first .ry.bak copy,
     so no early exit removes it; 7.257.0 a failed copy WARNs on the terminal
-  - backup: 7.267.0 a backup copy or a post-write restore, its mktemp
-    included, that sudo refused reads not run, not failed
+  - backup: 7.267.0 a backup copy or post-write restore, its mktemp included,
+    that sudo refused reads not run, not failed
   - services: 7.247.0 a PKGS_DEL hook error keeps the row's rdep-skip count
-  - services: 7.250.0 a resolved drop-in in a root-only directory no longer
-    skips the restart, nor reads absent under a lapsed sudo
-  - services: 7.251.0 an owed systemd-resolved restart that a lapsed sudo
-    cache blocks reads WARN (applies next boot), not SKIP
+  - services: 7.250.0 a root-only resolved drop-in no longer skips the
+    restart; 7.251.0 a lapse-blocked owed restart reads WARN
   - services: 7.252.0 the fstab rewrite no longer refuses over a findmnt
     --verify error, 7.254.0 or a parse error, that the original carries too
   - services: 7.252.0 under a lapsed sudo cache a masked ufw.service reads
     firewall unverified, not down; enable and mask retries name the lapse
   - services: 7.252.0 nftables-first no longer claims ufw rules stay before
     the ufw step decides; SECURITY says whether the mask follows or holds
-  - services: 7.254.0 an fstab with only malformed ext4 rows WARNs
-  - services: 7.254.0 a mask retry under a lapsed sudo cache FAILs naming the
-    lapse (MASK_LAPSE); a mask FAIL row counts units masked but not stopped
-  - services: 7.254.0 the enable row no longer counts nftables.service as
-    already enabled when the nftables-first step enabled it this run
-  - services: 7.254.0 - 7.255.0 the mask and enable rows lead with their notes
-  - services: 7.254.0 - 7.255.0 the enable row WARNs naming a unit not
-    installed; 7.257.0 it then counts only units this run enabled
+  - services: 7.254.0 an fstab with only malformed ext4 rows WARNs; a mask
+    retry under a lapsed sudo FAILs naming it (MASK_LAPSE)
+  - services: 7.254.0 a mask FAIL row counts units masked but not stopped; the
+    enable row no longer counts an nftables-first enable as already enabled
+  - services: 7.254.0 - 7.255.0 the mask and enable rows lead with their
+    notes; the enable row WARNs naming a unit not installed
   - services: 7.255.0 the fstab rewrite names a sudo lapse when its mktemp or
     read fails; a masked unit still activating is stopped by mask --now
   - services: 7.255.0 a regdom apply sudo refused names the lapsed cache; with
     ufw masked and nftables down, the SECURITY line names a diagnosis
-  - services: 7.255.0 a package a failed PKGS_DEL batch took counts as removed
-  - services: 7.257.0 a failed fstab scan FAILs the fstab step
+  - services: 7.255.0 a package a failed PKGS_DEL batch took counts as
+    removed; 7.257.0 the enable row counts only units this run enabled
+  - services: 7.257.0 a failed fstab scan FAILs the fstab step; 7.258.0 a MASK
+    unit removed while running is masked and stopped
   - services: 7.258.0 a PKGS_DEL member that failed while a later member
     depended on it is retried; its row tells probe-failed from rdep skips
-  - services: 7.258.0 a MASK unit removed while running is masked and stopped
   - services: 7.258.0 on systemd 253+, an empty is-enabled answer no longer
     skips the unit; an enabled but stopped NetworkManager.service is started
   - services: 7.258.0 the fstab rewrite's findmnt --verify runs under
     RY_RUN_TIMEOUT (0: no limit); a timeout refuses the rewrite
   - services: 7.260.0 a package-preset unit the enable batch owned is reported
-    once when its start fails
-  - services: 7.260.0 a resolved restart that sudo refused reads not run; a
-    lapsed preset start shows no Diagnose hint
-  - services: 7.260.0 a start, enable or mask that ran and failed while the
-    sudo ticket expired reads as failed, not as a lapse
+    once when its start fails; a lapsed preset start shows no Diagnose hint
+  - services: 7.260.0 a resolved restart sudo refused reads not run; a start,
+    enable or mask that ran and failed as the ticket expired reads as failed
   - services: 7.260.0 the enable row reads enabled, not started for a unit
     whose start failed or was refused
-  - services: 7.267.0 a PKGS_DEL removal, an fstab size probe or move, or a
-    ufw disable that sudo refused names the lapsed cache
-  - services: 7.267.0 an nftables ruleset probe that sudo refused before the
-    ufw flush reads not probed, not as a ruleset not confirmed live
+  - services: 7.267.0 a refused PKGS_DEL removal, fstab probe or move, or ufw
+    disable names the lapsed cache; a refused nft probe reads not probed
   - services: 7.270.0 an fstab awk/tee rewrite, chmod or chown --reference, or
-    findmnt --verify that sudo refused reads not run, naming the lapsed cache
-  - services: 7.271.0 a PKGS_DEL removal, mask or enable batch that sudo
-    refused reads not run, with no per-item retry
-  - services: 7.271.0 the PKGS_DEL removal, mask, enable and fstab rows name
-    the lapsed cache when a retry or the fstab rewrite ran into it
+    findmnt --verify sudo refused reads not run, naming the lapsed cache
+  - services: 7.271.0 a refused PKGS_DEL, mask or enable batch reads not run,
+    no per-item retry; these and the fstab row name a lapse they ran into
   - services: 7.272.0 after sudo refused the pacman -D re-mark, the PKGS_DEL
     removal is not tried and no longer says it removes without -s
   - services: 7.272.0 after sudo refused the enable batch, no package-preset
     unit start is tried; each still reads not started (sudo cache lapsed)
-  - boot: 7.250.0 an empty loader entries directory no longer adds
-    sdboot-manage gen or LINUX_OPTIONS hints before the banner
-  - boot: 7.250.0 the loader-entry boundary check resolves symlinks as root
+  - boot: 7.250.0 an empty entries dir adds no sdboot-manage gen or
+    LINUX_OPTIONS hint pre-banner; the boundary check resolves links as root
   - boot: 7.250.0 - 7.252.0 an ESP-fallback host's DO NOT REBOOT banner says
     to check the ESP and re-run, even mid-pacman, never sdboot-manage gen
   - boot: 7.252.0 the EFI refresh runs bootctl --graceful update and fails on
     its error; 7.254.0 the DO NOT REBOOT rebuild step prints it too
-  - boot: 7.255.0 the DO NOT REBOOT inspect step quotes $BOOT
-  - boot: 7.255.0 boot sanity lists loader entries as systemd-boot does
-    (hidden skipped, .conf in any case) and fails one it cannot read
-  - boot: 7.257.0 a loader entry name ending in .. no longer fails boot sanity
-  - boot: 7.258.0 boot sanity also fails an entry whose kernel is empty or
-    whose initrd is not a regular file, such as a directory
+  - boot: 7.255.0 the inspect step quotes $BOOT; sanity lists entries as
+    systemd-boot does and fails an unreadable one
+  - boot: 7.257.0 an entry name ending in .. no longer fails boot sanity;
+    7.258.0 an empty kernel or a non-regular initrd, such as a directory, does
   - boot: 7.260.0 boot sanity also fails a linux entry with no initrd line,
     names a sudo lapse once and stops probing, and says why a listing failed
   - boot: 7.260.0 boot sanity reads entries as systemd-boot does (last linux
     line, auto-* skipped); an unmounted /boot reads fstype=none
-  - boot: 7.267.0 a full install's rebuild step that sudo refused logs not
-    run, not failed, as its summary row reads
-  - boot: 7.271.0 a mkinitcpio.conf revert that sudo refused reads not run
-    (sudo) in the mkinitcpio -P row; a sanity FAIL row names the lapsed cache
+  - boot: 7.267.0 a full install's rebuild step sudo refused logs not run, as
+    its row reads; 7.271.0 a sanity FAIL row names the lapsed cache
+  - boot: 7.271.0 a mkinitcpio.conf revert sudo refused reads not run (sudo)
+    in the mkinitcpio -P row
   - finalize: 7.252.0 without PowerDevil, an environment.d change skips the
     re-apply; 7.254.0 an NM_RESTART_DELAY ending in a newline reads as 3 s
   - finalize: 7.255.0 the matrix Next line points at ./ry-verify.fish in the
@@ -311,10 +290,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     NetworkManager owes no restart; one sudo refused reads not run
   - install-file: 7.260.0 a sysctl --system or udevadm verify that ran and
     failed as the sudo ticket expired reads as failed, not as a lapse
-  - install-file: 7.267.0 a boot rebuild step (mkinitcpio, sdboot-manage gen,
-    bootctl update) that sudo refused reads not run
-  - install-file: 7.267.0 a daemon-reload, a cpupower, nftables or bluetooth
-    restart, or a udev reload or trigger that sudo refused reads not run
+  - install-file: 7.267.0 a refused mkinitcpio, sdboot-manage gen, bootctl
+    update, daemon-reload, restart, or udev reload or trigger reads not run
   - install-file: 7.270.0 a sysctl --system, nft -c re-check or udevadm verify
     that sudo refused reads not run, not failed or no verdict
   - logging: 7.246.0 a failed pacman call echoes its package-conflict lines
@@ -344,10 +321,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     longer counts Done! as a pass or the error recap as a fail and a warn
   - logging: 7.254.0 - 7.255.0 Finalize's NM deferral leaves an NM-only owed
     list as filed and logs PENDING_APPLY_DROPPED per drop
-  - logging: 7.255.0 an empty explicit mark logs PKG_ASEXPLICIT_SKIP
   - logging: 7.255.0 one failure counts once in the footer, however many lines
     restate it; a skipped enable or blocked resolved restart counts a WARN
-  - logging: 7.255.0 refusals log HARDWARE_*_REFUSED and ROOT_UUID_UNAVAILABLE
+  - logging: 7.255.0 an empty explicit mark logs PKG_ASEXPLICIT_SKIP; refusals
+    log HARDWARE_*_REFUSED and ROOT_UUID_UNAVAILABLE
   - logging: 7.255.0 a sudo lapse that skips a signal-time revert is logged
   - logging: 7.257.0 a failed resolved or PowerDevil restart, user
     daemon-reload, cache trim or indexer run logs a _FAIL key
@@ -364,25 +341,22 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     reason, both digests and, for reason=size, both sizes
   - logging: 7.258.0 POSTWRITE_RESTORE_STALE only when an older copy exists;
     an unmanaged nftables.service logs NFT_PRE_ENABLE_UNMANAGED
-  - logging: 7.260.0 an invalid or clamped RY_RUN_TIMEOUT counts a footer warn
+  - logging: 7.260.0 an invalid or clamped RY_RUN_TIMEOUT counts a footer
+    warn; an ESP layout refusal logs ESP_LAYOUT_REFUSED
   - logging: 7.260.0 a ~/ry-install dir reset to 0700 logs STATE_DIR_PERM_FIX;
     one that stays wrong names the state tree in its ERR, not the log tree
-  - logging: 7.260.0 an ESP layout refusal logs ESP_LAYOUT_REFUSED
   - logging: 7.260.0 sudo-refused steps log PRESET_START_LAPSE,
     NM_RESTART_LAPSE, RESOLVED_RESTART_LAPSE or PACMAN_CACHE_TRIM_LAPSE
   - logging: 7.260.0 an ESP gate lapse logs ESP_LAYOUT_LAPSE; refused
     post-hook restarts POST_RESOLVED_RESTART_LAPSE or POST_NM_RESTART_LAPSE
   - logging: 7.260.0 a lapsed read-back logs POSTWRITE_VERIFY_SKIP
     reason=read_lapse, a failed one POSTWRITE_VERIFY_FAIL reason=unreadable
-  - logging: 7.260.0 a post-footer mkinitcpio revert prints but logs nothing
-  - logging: 7.265.0 every run logs the running kernel release as
-    KERNEL_RELEASE
+  - logging: 7.260.0 a post-footer mkinitcpio revert prints but logs nothing;
+    7.265.0 every run logs the running kernel release as KERNEL_RELEASE
   - logging: 7.267.0 sudo-refused steps log their key with _LAPSE for _FAIL,
     as POST_BOOT_REBUILD_LAPSE, PKG_REMOVE_LAPSE or MKINITCPIO_SNAPSHOT_LAPSE
-  - logging: 7.270.0 a conflict swap, explicit mark, indexer, mkinitcpio.conf
-    snapshot probe or revert that sudo refused logs _LAPSE, not _FAIL
-  - logging: 7.270.0 a regdom, sysctl, nft -c or udevadm verify post-hook step
-    that sudo refused logs _LAPSE
+  - logging: 7.270.0 refused swaps, marks, indexers, snapshot probes, reverts
+    and regdom, sysctl, nft -c or udevadm verify post-hooks log _LAPSE
   - logging: 7.271.0 TMPFILE_STUCK tells a lapsed sudo cache from a missing
     sudo or a path outside the escalation roots
   - progress: 7.254.0 a signal while the bar pins or unpins no longer leaves
@@ -391,13 +365,18 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - summary: 7.257.0 a run whose -Syu changed packages adds a manual step to
     review archlinux.org/news and wiki.cachyos.org
   - summary: 7.258.0 a failed mkinitcpio, sdboot-manage gen or bootctl update
-    row gives the command's rc, or that it never ran
-  - summary: 7.260.0 boot steps sudo refused read not run
+    row gives its rc, or never ran; 7.260.0 refused ones read not run
   - consistency: 7.260.0 an nft -c that _run cannot start reads no capture dir
   - consistency: 7.264.0 messages and log lines read user bus, not user-bus;
     DEPLOY_HELD reads re-deploy; lock write and install errors read pidfile
   - consistency: 7.265.0 --help and the README say the 7200 s floor covers
     pkg/boot/db ops, as the log line does
+  - consistency: 7.273.0 --help, the root refusal, the ESP fallback warning
+    and the ufw.service withheld WARN drop sentence periods
+  - consistency: 7.273.0 next-boot hints no longer read on reboot or next
+    reboot; the NetworkManager restart row and WARN match the resolved ones
+  - consistency: 7.273.0 messages read Bootloader, refusing to install and
+    pacman signature checks may fail; the no-NM WARN names one config
 
 
 7.235.0 - 7.245.0
@@ -600,8 +579,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - env: 7.195.0 GSK_RENDERER ngl -> gl, drop PROTON_FSR4_INDICATOR=1; 7.212.1
     add RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
   - sysctl: 7.195.0 add vm.watermark_scale_factor=125
-  - configuration: 7.195.0 MangoHud cpu_stats on, cpu_temp off; 7.203.0 one
-    header per managed file, nftables drops its ports invite
+  - configuration: 7.195.0 MangoHud cpu_stats on, cpu_temp off; 7.203.0 a
+    header on all but /etc/kernel/cmdline, nftables drops its ports invite
   - configuration: 7.205.0 cpupower header names EnvironmentFile=; 7.211.0
     udev comments print EPP and GPU levels; resolved drops mDNS/LLMNR claim
   - packages: 7.198.0 add dmemcg-booster and plasma-foreground-booster;
@@ -630,19 +609,25 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.139.0 - 7.189.0
 -----------------
 
-  - kernel: land on iommu=pt; drop amd_iommu, clearcpuid=umip, amdxdna
-  - network: autoconnect-retries-default=0
-  - dns: drop pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
-  - env: PROTON_FSR4_UPGRADE -> FSR4_WATERMARK -> PROTON_FSR4_INDICATOR=1;
-    drop PROTON_ENABLE_WAYLAND=1; add GSK_RENDERER=ngl
-  - sysctl: drop both net.core.netdev_budget keys and vm.swappiness=150
-  - configuration: ICMPv6 base accept in nftables
+  - kernel: 7.160.0 drop clearcpuid=umip; 7.162.0 land on iommu=pt, drop the
+    amdxdna blacklist; 7.164.0 drop amd_iommu
+  - network: 7.163.0 autoconnect-retries-default=0
+  - dns: 7.148.0 drop pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
+  - env: 7.154.0 PROTON_FSR4_UPGRADE -> FSR4_WATERMARK; 7.156.0 drop
+    PROTON_ENABLE_WAYLAND=1; 7.163.0 add GSK_RENDERER=ngl
+  - env: 7.181.0 FSR4_WATERMARK -> PROTON_FSR4_INDICATOR=1
+  - sysctl: 7.157.0 drop both net.core.netdev_budget keys; 7.171.0 drop
+    vm.swappiness=150
+  - configuration: 7.159.0 ICMPv6 base accept in nftables
   - packages: 7.173.0 add cachyos-benchmarker
-  - preflight: rc 3 on a reserved COUNTRY, NM_WIFI_POWERSAVE outside 0-3
-  - backup: .ry.bak moves to ~/ry-install/backups; 7.176.0 drop .ry.orig
+  - preflight: 7.185.1 an NM_WIFI_POWERSAVE outside 0-3 exits 3, as a reserved
+    COUNTRY does
+  - backup: 7.174.0 .ry.bak moves to ~/ry-install/backups; 7.176.0 drop
+    .ry.orig
   - fstab: 7.182.1 parity probe never ran
-  - boot: COMPRESSION_OPTIONS -1 -> -3, drop -T0; fsck.mode=force -> auto
-  - install: chmod on mode drift, bytes unchanged
+  - boot: 7.140.0 drop -T0; 7.158.0 COMPRESSION_OPTIONS -1 -> -3,
+    fsck.mode=force -> auto
+  - install: 7.171.0 chmod on mode drift, bytes unchanged
   - install-file: 7.177.3 -h and -v were swallowed after --install-file
   - split: 7.177.0 move verify and check to ry-verify.fish
 

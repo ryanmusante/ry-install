@@ -1,8 +1,8 @@
 # ry-install
 
-**Version 7.273.0** · [Changelog](CHANGELOG.md)
+**Version 7.274.0** · [Changelog](CHANGELOG.md)
 
-Deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab — one unattended, idempotent run, with `--install-file <path>` for single-file repair. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+ry-install deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). In one unattended, idempotent run, `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab; `--install-file <path>` re-deploys one managed file. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -39,7 +39,7 @@ The bare invocation is the unattended install, all 6 phases; `--install-file <pa
 
 Each run that passes argument parsing writes one JSONL log (`0600`) to `~/ry-install/logs/YYYY-MM-DD/MODE-YYYYMMDD-HHMMSS±ZZZZ-PID.jsonl`, where `MODE` is `install` or `install-file`.
 
-Per-step results (one summary row each):
+Each step gets one row in the run summary, with one of these results:
 
 | Result | Meaning |
 |---|---|
@@ -65,13 +65,13 @@ Per-step results (one summary row each):
 
 Skipping the hardware check is the risky override — a wrong-CPU deploy writes an incorrect kernel cmdline and initramfs `MODULES`.
 
-- `RY_RUN_TIMEOUT=<sec>` — per-command wall-clock cap; default `3600`, `0` disables, package/boot/db ops floor `7200`
+- `RY_RUN_TIMEOUT=<sec>` — per-command wall-clock cap; default `3600`, `0` disables; package, boot, and database commands get at least `7200`
 - `RY_INSTALL_SKIP_HARDWARE_CHECK=1` — bypass the `EXPECTED_CPU_MATCH` hard-fail
 - `NO_COLOR` — disable colored output when set to a non-empty value ([no-color.org](https://no-color.org))
 
 ## Managed Files
 
-In deploy order; system files land `0644`, user files `0600`; `loader.conf` on the vfat ESP takes the mode its mount sets.
+Files are listed in deploy order. System files land `0644` and user files `0600`; `loader.conf`, on the vfat ESP, takes the mode its mount sets.
 
 ### Boot
 
@@ -96,7 +96,7 @@ In deploy order; system files land `0644`, user files `0600`; `loader.conf` on t
 
 ### User
 
-- `~/.config/environment.d/10-environment.conf` — session env: DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine
+- `~/.config/environment.d/10-environment.conf` — session environment: DXVK, GTK, MangoHud, Mesa, PowerDevil, Proton, SDL, VKD3D, Wine
 - `~/.config/MangoHud/MangoHud.conf` — readout-only HUD: horizontal, top-left, toggle `Shift_R+F12`
 - `~/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf` — Bluetooth audio roles: A2DP and LE Audio (idle; see [Bluetooth Audio](#bluetooth-audio)), no hands-free (HFP/HSP)
 
@@ -105,7 +105,13 @@ In deploy order; system files land `0644`, user files `0600`; `loader.conf` on t
 1. **Preflight** — sudo cache, dependency, systemd, disk, ESP, pacman-lock, and network gates; a warn-only time-sync check; config validation. The first failed gate ends the run with exit `3`, and its summary lists only the checks that ran.
 2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails) and any `EXPECTED_VULKAN_PKGS` member not yet installed, refresh `updatedb`/`pkgfile`. A member of either list that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 18 embedded configs atomically.
-4. **Services** — fstab → resolved restart → package removal (`PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure) → mask (`ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it) → enable (a unit not installed, or one that enables but fails to start, is a `WARN`; `NetworkManager.service` keeps its package preset and is started when it is not running) → regulatory domain.
+4. **Services** — six steps, in order:
+   1. fstab options
+   2. resolved restart
+   3. package removal — `PKGS_ADD` re-marked explicit first; held after an earlier package or boot-file failure
+   4. mask — `ufw.service` only once the nftables default-deny is live, and a `SECURITY` `WARN` when it is already masked and nftables is down; a unit that masks but fails to stop is a `WARN`, and the next full run stops it
+   5. enable — a unit not installed, or one that enables but fails to start, is a `WARN`; `NetworkManager.service` keeps its package preset and is started when it is not running
+   6. regulatory domain
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` present as non-empty files inside `$BOOT`.
 6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved, NetworkManager, or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
 
@@ -117,7 +123,7 @@ In deploy order; system files land `0644`, user files `0600`; `loader.conf` on t
 
 **Backups** — a `.ry.bak` copy lands in `~/ry-install/backups/` under a slash-encoded name (`/etc/fstab` → `_etc_fstab.ry.bak`) each time a run rewrites one of the 4 boot files or the fstab, replacing the previous copy; a copy that fails prints a `WARN`, and the rewrite proceeds.
 
-**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=`; every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab opts` summary row `WARN`. A power loss can discard up to 10 s of metadata.
+**fstab rewrite** — ext4 rows get `noatime,lazytime,commit=10` in column 4, replacing `defaults`, `relatime`, `atime`, `strictatime`, `nolazytime`, and every existing `commit=`; every other row is byte-preserved. An ext4 row with fewer than 4 fields, or whose column 4 is all digits (options column missing), is left untouched and turns the `Services: fstab options` summary row `WARN`. A power loss can discard up to 10 s of metadata.
 
 ## Embedded Values
 
@@ -206,7 +212,7 @@ New values reach programs started after the next graphical login; a running Stea
 
 ### Sysctl Overrides
 
-Ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cluster` is left to the vendor file, which sets `0`.
+The drop-in ships at priority `95`, after the vendor `70-cachyos-settings.conf`. `vm.page-cluster` is left to the vendor file, which sets `0`.
 
 - `kernel.nmi_watchdog` = `0` — NMI watchdog off
 - `net.core.default_qdisc` = `fq` — pairs with BBR
@@ -254,22 +260,22 @@ Adding or dropping a token means editing `KERNEL_PARAMS` in both scripts and its
 - `ipv6.disable=1` — the ruleset carries the ICMPv6 base accept, so the fallback entry still gets working NDP; for dual-stack, drop the token, add any service-specific IPv6 rules, and re-run.
 - `pcie_aspm.policy=performance` — addresses Bluetooth reconnect and NVMe latency; plain `pcie_aspm=off` only inherits the BIOS state.
 - `mt7925e.disable_aspm=1` — pairs with `pcie_aspm.policy=performance` at the endpoint driver; coredumps are still reported on the Wi-Fi adapter without it. Drop either token to restore the default.
-- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters but `quiet`, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds. From `systemd-boot-manager` 22, `sdboot-manage` writes no fallback entry and ignores this key, building each entry from `/etc/kernel/cmdline` plus `LINUX_OPTIONS`, so the `options` line carries every managed token twice — harmless, since both copies hold the same value and `ry-verify` checks only presence.
+- `LINUX_FALLBACK_OPTIONS="quiet"` — the fallback entry carries none of the managed kernel parameters but `quiet`, so it boots with the IOMMU on, IPv6 enabled, and firmware-default ASPM; `sdboot-manage` writes one only when a fallback initramfs image exists, which the stock `mkinitcpio` preset template no longer builds. From `systemd-boot-manager` 22, `sdboot-manage` writes no fallback entry and ignores this key, and builds each entry's `options` line from `/etc/kernel/cmdline`; from 23 it also appends `LINUX_OPTIONS`, so the line carries every managed token twice — harmless, since both copies hold the same value and `ry-verify` checks only presence.
 - `timeout 0` with `default @saved` — with no saved entry (fresh ESP), systemd-boot picks by its own sort order and can boot the fallback unseen; hold a key at power-on and select the tuned entry once.
 
 ## BIOS
 
-Multi-thread gains flatten past ~85 W. Set `SPL = fPPT = sPPT = 85 W` (stock boosts to 140 W) with `STAPM Boost = 0` and `TjMax = 90 °C`, under `Advanced → SMU Common Options`; per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
+Multi-thread gains flatten past ~85 W. Under `Advanced → AMD CBS → SMU Common Options`, set `SPL Control` and `PPT Control` to Manual and `SPL = fPPT = sPPT = 85000` (mW, 85 W; stock boosts to 140 W), set `STAPM Boost Override = 1` with `STAPM Boost = 0`, and leave `TjMax` at its default `0x5A` (90 °C); per-setting walkthrough: [gtr9pro-bios-reference](https://github.com/ryanmusante/gtr9pro-bios-reference).
 
 ## Troubleshooting
 
-**Boot failure** — live USB → `arch-chroot` → `mkinitcpio -P` → `sdboot-manage gen` → `bootctl --graceful update`.
+**Boot failure** — boot a live USB and `arch-chroot` into the installed system, then run `mkinitcpio -P`, `sdboot-manage gen`, and `bootctl --graceful update`.
 
 **PipeWire permission denied** — `sudo usermod -aG realtime $USER`, then log in again; the `realtime` group comes from `realtime-privileges`.
 
 **Bluetooth speaker will not auto-reconnect** — `bluetoothctl trust <MAC>`, then power the speaker on after login.
 
-**HP printer not discovered** — the profile masks Avahi and turns mDNS off, so add the printer by IP: `sudo lpadmin -p hp-printer -E -v ipp://192.168.50.228/ipp/print -m everywhere`. Change `192.168.50.228` to the printer's address from the router's DHCP assignment; a DHCP reservation keeps that address fixed.
+**Network printer not discovered** — the profile masks Avahi and turns mDNS off, so add the printer by address: `sudo lpadmin -p <name> -E -v ipp://<printer-ip>/ipp/print -m everywhere`, where `<printer-ip>` is the address the router's DHCP server assigned; a DHCP reservation keeps that address fixed.
 
 **libvirt and QEMU NAT** — `forward { policy drop; }` breaks guest WAN access. VMs are out of scope; if you run them, do **not** duplicate NAT (libvirt's `guest_nat` already masquerades `192.168.122.0/24`).
 

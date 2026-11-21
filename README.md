@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.276.0** · [Changelog](CHANGELOG.md)
+**Version 7.300.0** · [Changelog](CHANGELOG.md)
 
 ry-install deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). In one unattended, idempotent run, `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab; `--install-file <path>` re-deploys one managed file. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -66,7 +66,7 @@ Each step gets one row in the run summary, with one of these results:
 Skipping the hardware check is the risky override — a wrong-CPU deploy writes an incorrect kernel cmdline and initramfs `MODULES`.
 
 - `RY_RUN_TIMEOUT=<sec>` — per-command wall-clock cap; default `3600`, `0` disables; package, boot, and database commands get at least `7200`
-- `RY_INSTALL_SKIP_HARDWARE_CHECK=1` — bypass the `EXPECTED_CPU_MATCH` hard-fail
+- `RY_INSTALL_SKIP_HARDWARE_CHECK=1` — warn and continue when the CPU model does not match `EXPECTED_CPU_MATCH` or cannot be read, instead of exiting `3`
 - `NO_COLOR` — disable colored output when set to a non-empty value ([no-color.org](https://no-color.org))
 
 ## Managed Files

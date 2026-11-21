@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.276.0 (2026-11-20) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.300.0 (2026-11-20) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.276.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.300.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -1070,7 +1070,7 @@ function _rm_tmp --argument-names path use_sudo --description "Sudo-aware tmpfil
     end
 end
 function _track_tmpfile --argument-names path --description "Track a tmpfile/dir in _TRACKED_TMPFILES"; test -n "$path"; or return 0; test "$path" = /dev/null; and return 0; set -ga _TRACKED_TMPFILES "$path"; end
-function _mktemp_or_null --description "Wrapper for mktemp; emits path on stdout, /dev/null sentinel on failure"
+function _mktemp_or_null --description "Run mktemp; echo the path, or the /dev/null sentinel on failure"
     set -l _tf (command mktemp $argv 2>/dev/null)
     if test -z "$_tf"; echo /dev/null; _log "MKTEMP_OR_NULL_FAIL: args='$argv' — falling back to /dev/null sentinel"; return 0; end
     echo "$_tf"; return 0
@@ -1087,7 +1087,7 @@ function _is_symlink --argument-names path use_sudo --description "Sudo-aware te
         test -L "$path"
     end
 end
-function _is_system_dst --argument-names dst --description "True if dst is a system path (requires sudo to read)"
+function _is_system_dst --argument-names dst --description "True when dst is a system path (requires sudo to read)"
     set -l _p (string trim -r -c / -- "$dst"); for _u in $USER_DESTINATIONS; test "$_p" = "$_u"; or test "$_p" = (path dirname -- "$_u"); and return 1; end # HOME may sit under /etc or /boot
     string match -q '/etc/*' -- "$dst"; or string match -q '/boot/*' -- "$dst"
 end
@@ -1208,7 +1208,7 @@ function _err_recap --argument-names since --description "Recap _err: counts onl
     if test "$VERIFY_FAIL" -gt "$since"; _err_cont $argv[2..-1]; else; _err $argv[2..-1]; end
     return 0
 end
-function _err_loud --description "Fatal-preflight err: prints to stderr regardless of QUIET"; set -l msg (string join -- " " $argv); test -n "$msg"; or return 0; _log "ERR: $msg"; set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1); _msg_print --force ERR $argv; end
+function _err_loud --description "Fatal-preflight err: stderr regardless of QUIET"; set -l msg (string join -- " " $argv); test -n "$msg"; or return 0; _log "ERR: $msg"; set -q VERIFY_FAIL; and set -g VERIFY_FAIL (math $VERIFY_FAIL + 1); _msg_print --force ERR $argv; end
 function _err_loud_cont --description "Continuation for _err_loud: same routing, no VERIFY_FAIL bump"; set -l msg (string join -- " " $argv); test -n "$msg"; or return 0; _log "ERR: $msg"; _msg_print --force ERR $argv; end
 function _warn_loud --description "Loud warn: log, bump VERIFY_WARN, print to stderr regardless of QUIET" # mirrors _err_loud
     set -l msg (string join -- " " $argv); test -n "$msg"; or return 0 # as _msg: an empty message neither logs nor counts
@@ -1311,7 +1311,7 @@ function _run_resolve_timeout --description "_run_effective_timeout and _fstab_a
         if test (string length -- (string replace -r '^0+(?=.)' '' -- "$RY_RUN_TIMEOUT")) -gt 9 # fish math overflows past 2^53; >9 significant digits ≈ 31 y — clamp
             if not set -q _RY_RUN_TIMEOUT_CLAMPED
                 set -g _RY_RUN_TIMEOUT_CLAMPED true
-                _warn_loud "RY_RUN_TIMEOUT='$RY_RUN_TIMEOUT' exceeds 9 digits — using 2147483647 s" # install pins QUIET
+                _warn_loud "RY_RUN_TIMEOUT=$RY_RUN_TIMEOUT exceeds 9 digits — using 2147483647 s" # install pins QUIET
                 _log "RY_RUN_TIMEOUT_CLAMPED: value=$RY_RUN_TIMEOUT — using 2147483647"
             end
             echo 2147483647; return 0
@@ -1403,7 +1403,7 @@ function _run --description "Execute a command with logging, stdout/stderr captu
     _track_tmpfile "$_run_dir"
     if test -z "$_run_dir"; or not test -d "$_run_dir"
         _log "RUN_ABORT: mktemp -d failed for cmd=$log_cmd — refusing to execute without stderr capture"
-        _err_cont "_run: cannot allocate tmpdir for stdout/stderr capture — aborting command" # each caller counts the failed command
+        _err_cont "_run: cannot allocate a capture directory for stdout/stderr — aborting command" # each caller counts the failed command
         return $EXIT_RUN_TMPFAIL
     end
     set -l stderr_tmp "$_run_dir/stderr"; set -l stdout_tmp "$_run_dir/stdout"; set -l _run_timeout (_run_effective_timeout $argv); set -l _t0 (_progress_now)
@@ -1975,7 +1975,7 @@ function _awf_content_prevalidate --argument-names dst tmpfile use_sudo --descri
 end
 
 # ── ATOMIC FILE INSTALL: PUBLIC ENTRY (_ry_install_file → mkdir 0755 → _atomic_write_file) ──
-function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write. rc=0 ok; rc=1 any failure"
+function _atomic_write_file --argument-names dst perms use_sudo --description "Atomic file write; rc 0 ok, rc 1 any failure"
     set -l dst_dir (command dirname -- "$dst"); set -l _is_bt false; contains -- "$dst" $_RY_BACKUP_TARGETS; and set _is_bt true
     set -l tmpfile (_as $use_sudo mktemp -p "$dst_dir" .ry-install.XXXXXX 2>/dev/null)
     if test -z "$tmpfile"
@@ -2025,7 +2025,7 @@ function _ry_install_file --argument-names dst use_sudo --description "Install a
 end
 
 # ── MISC HELPERS: WI-FI ROUTE, USER BUS + USER UNITS ──
-function _is_wifi_active_route --description "True if default route exits via wireless interface"
+function _is_wifi_active_route --description "True when the default route exits via a wireless interface"
     command -q ip; or return 1
     set -l _def_iface ""
     for _af in -4 -6; set _def_iface (command ip $_af route show default 2>/dev/null | command awk '/^default/ {for(i=1;i<=NF;i++) if($i=="dev") {print $(i+1); exit}}'); test -n "$_def_iface"; and break; end
@@ -2044,7 +2044,7 @@ function _is_wifi_active_route --description "True if default route exits via wi
     end
     return 1
 end
-function _has_user_bus_active --description "True iff user systemd manager is reachable"
+function _has_user_bus_active --description "True when the user systemd manager is reachable"
     set -q XDG_RUNTIME_DIR; and test -S "$XDG_RUNTIME_DIR/bus"; and return 0
     set -l _user_state (command systemctl --user is-system-running 2>/dev/null | string trim --); test -n "$_user_state"; and test "$_user_state" != offline; and return 0
     return 1
@@ -2468,7 +2468,7 @@ function _far_awk_rewrite --argument-names tmpfstab --description "_fstab_atomic
     end
     if test -z "$_tmp_size"; and not sudo -n true 2>/dev/null; _fail "  /etc/fstab: rewrite size probe not run (sudo cache lapsed) — refusing to install"; return 1; end # a lapse is not a short file
     if not string match -qr '^[0-9]+$' -- "$_tmp_size"; or test "$_tmp_size" -lt "$_min_size"
-        _fail "  /etc/fstab: rewrite produced suspiciously small tmpfile ($_tmp_size bytes < $_min_size) — refusing to install"; return 1
+        _fail "  /etc/fstab: rewrite produced a suspiciously small temp file ($_tmp_size bytes < $_min_size) — refusing to install"; return 1
     end
     return 0
 end

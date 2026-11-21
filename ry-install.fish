@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.301.0 (2026-11-21) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.302.0 (2026-11-21) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.301.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.302.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -3276,7 +3276,7 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
     if not _run sudo -n systemctl restart -- NetworkManager.service
         set -l _why "restart failed"; set -l _cell "restart failed (applies next boot)"; set -l _key NM_RESTART_FAIL
         _sudo_refused; and begin; set _why "restart not run (sudo cache lapsed)"; set _cell "not run (sudo cache lapsed); applies next boot"; set _key NM_RESTART_LAPSE; end # sudo refused it
-        _warn "NetworkManager $_why — drop-in still applies at next boot (non-fatal)"; _log "$_key: context=finalize"; _phase_record "Finalize: NetworkManager restart" WARN "$_cell"
+        _warn "NetworkManager $_why — drop-in still applies at next boot (non-fatal)"; _log "$_key: context=finalize"; _phase_record "Finalize: NetworkManager restart" WARN "$_cell"; return 0 # failed or not run: nothing to settle
     else
         _phase_record "Finalize: NetworkManager restart" PASS "restarted"
     end

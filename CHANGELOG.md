@@ -3,14 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.301.0
+7.302.0
 -------
 
-  - readme: the Hardware row names the exit 3 on any other CPU
-  - changelog: trim bullets
+  - finalize: a failed or refused NM restart skips the 3 s settle sleep
 
 
-7.260.0 - 7.300.0
+7.260.0 - 7.301.0
 -----------------
 
   - configuration: 7.260.0 an unreadable boot file FAILs and is restored

@@ -162,7 +162,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - configuration: 7.243.0 an nft -c a lapsed sudo cannot run names the lapse;
     a mode drift chmod cannot repair warns
   - packages: 7.235.0 a PKGS_ADD member in conflict sits out -Syu and installs
-    alone with --ask=4 (pipewire-jack replaces jack2)
+    alone with --ask=4
   - packages: 7.240.0 a member a -git/-bin build provides swaps in after -Syu
   - packages: 7.243.0 a locked pacman db reverts the seeded mkinitcpio.conf;
     7.245.0 -Syyu re-reads holds
@@ -177,7 +177,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - services: 7.235.0 PKGS_DEL removal is held after an earlier package or
     boot-file failure; a hook or scriptlet error reads WARN
   - services: 7.240.0 a mask or enable FAIL names the failing units; the fstab
-    rewrite drops nolazytime like *atime
+    rewrite drops nolazytime
   - services: 7.242.0 a PKGS_DEL hook error reads WARN in any locale
   - services: 7.243.0 several commit= become one commit=10; ufw masked with
     nftables down prints a loud SECURITY warning naming the fix
@@ -226,8 +226,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - preflight: 7.225.0 the modprobe.d check names directives in match order
   - preflight: 7.233.0 /boot and ESP checks read the topmost non-autofs mount
   - preflight: 7.234.0 iommu=off counts as no IOMMU; HOOKS need a build script
-  - lock: 7.233.0 stale reclaim takes an exclusive claim; a pidfile from an
-    earlier boot or a reused PID is reclaimed, an unreadable one fails closed
+  - lock: 7.233.0 a pidfile from an earlier boot or a reused PID is reclaimed,
+    an unreadable one fails closed
   - backup: 7.231.0 a sudo lapse at the existence probe is warned and logged;
     7.234.0 the restore uses only this run's .ry.bak, never via a symlink
   - services: 7.233.0 a unit that enables but fails to start reads WARN
@@ -287,8 +287,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     vm.swappiness=150
   - configuration: 7.159.0 ICMPv6 base accept in nftables
   - packages: 7.173.0 add cachyos-benchmarker
-  - preflight: 7.185.1 an NM_WIFI_POWERSAVE outside 0-3 exits 3, as a reserved
-    COUNTRY does
+  - preflight: 7.185.1 an NM_WIFI_POWERSAVE outside 0-3 exits 3
   - backup: 7.174.0 .ry.bak moves to ~/ry-install/backups; 7.176.0 drop
     .ry.orig
   - fstab: 7.182.1 parity probe never ran

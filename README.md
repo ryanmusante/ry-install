@@ -2,7 +2,7 @@
 
 **Version 7.301.0** · [Changelog](CHANGELOG.md)
 
-ry-install deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). In one unattended, idempotent run, `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab; `--install-file <path>` re-deploys one managed file. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
+ry-install deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). In one unattended, idempotent run, `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
 ## Quick Start
 
@@ -27,7 +27,7 @@ A run that reaches Preflight closes with the Totals line and a verdict: `PASS` o
 | Shell | fish 3.6 or newer, with its default `regex-easyesc` feature on |
 | Hardware | CPU matching `Ryzen AI Max` — on any other CPU the run exits `3` unless overridden via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
-| Privileges | normal user with sudo rights; `sudo -v` cached before the run and re-armed every 30 s until the run exits — when it is not cached, the run prompts if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, if no credential ends up cached (`timestamp_timeout=0`), or if the credential is tied to the parent process (`timestamp_type=ppid`); an `--install-file` of a user file needs no sudo |
+| Privileges | normal user with sudo rights; `sudo -v` cached before the run and re-armed every 30 s — when it is not cached, the run prompts if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, if no credential ends up cached (`timestamp_timeout=0`), or if the credential is tied to the parent process (`timestamp_type=ppid`); an `--install-file` of a user file needs no sudo |
 | Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `bootctl`, `systemctl` |
 
 ## Usage
@@ -55,7 +55,7 @@ Each step gets one row in the run summary, with one of these results:
 | Code | Meaning |
 |---|---|
 | `0` | OK — success and `WARN`-only runs |
-| `1` | a failed install step, or `-h`/`-v` output that could not be written (stdout full, a pipe closed by its reader, or stdout closed under fish 3) |
+| `1` | a failed install step, or `-h`/`-v` output that could not be written |
 | `2` | bad arguments, a non-absolute, unmanaged, or repeated `--install-file`, or root misuse |
 | `3` | missing dependency; uncached sudo that no TTY prompt resolved, or a sudo credential tied to the parent process; a failed gate (root UUID, hardware, systemd, disk, ESP, pacman lock, network); a fish universal variable named like internal state; fish's `regex-easyesc` feature turned off; failed config validation; an unusable HOME, `~/ry-install` tree, or `/tmp` |
 | `4` | boot-critical — boot cascade or post-rebuild sanity failed, or an earlier package or boot-file failure blocked the rebuild; **do not reboot**, resolve first |
@@ -102,8 +102,8 @@ Files are listed in deploy order. System files land `0644` and user files `0600`
 
 ## Install Flow
 
-1. **Preflight** — sudo cache, dependency, systemd, disk, ESP, pacman-lock, and network gates; a warn-only time-sync check; config validation. The first failed gate ends the run with exit `3`, and its summary lists only the checks that ran.
-2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails) and any `EXPECTED_VULKAN_PKGS` member not yet installed, refresh `updatedb`/`pkgfile`. A member of either list that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, in a transaction that removes the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
+1. **Preflight** — sudo cache, dependency, systemd, disk, ESP, pacman-lock, and network gates; a warn-only time-sync check; config validation. The first failed gate ends the run with exit `3`.
+2. **Packages** — seed `mkinitcpio.conf`, `pacman -Syu`, install `PKGS_ADD` (re-marked explicit even when `-Syu` fails) and any `EXPECTED_VULKAN_PKGS` member not yet installed, refresh `updatedb`/`pkgfile`. A member of either list that an installed package conflicts with, directly or through a dependency, installs after `-Syu`, replacing the conflicting package; the run summary names what it removed. A `-Syu` that fails, or is skipped because the pacman database is locked or the `mkinitcpio.conf` seed failed to deploy, restores the original `mkinitcpio.conf`, and Configuration leaves it in place.
 3. **Configuration** — deploy 18 embedded configs atomically.
 4. **Services** — six steps, in order:
    1. fstab options
@@ -113,7 +113,7 @@ Files are listed in deploy order. System files land `0644` and user files `0600`
    5. enable — a unit not installed, or one that enables but fails to start, is a `WARN`; `NetworkManager.service` keeps its package preset and is started when it is not running
    6. regulatory domain
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` present as non-empty files inside `$BOOT`.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`; the file also records a NetworkManager restart deferred because Wi-Fi carries the default route, and an `--install-file` systemd-resolved, NetworkManager, or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus. The next full run applies them unless a reboot already has, and defers the NetworkManager restart again while Wi-Fi still carries the route.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. `~/ry-install/pending-apply` records what a run still owes: the restarts of a run that stops before Finalize, a NetworkManager restart deferred while Wi-Fi carries the default route, and an `--install-file` systemd-resolved, NetworkManager, or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus. The next full run applies them unless a reboot already has, and defers the NetworkManager restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
 

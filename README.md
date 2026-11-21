@@ -1,6 +1,6 @@
 # ry-install
 
-**Version 7.300.0** · [Changelog](CHANGELOG.md)
+**Version 7.301.0** · [Changelog](CHANGELOG.md)
 
 ry-install deploys a tuned CachyOS configuration on the Beelink GTR9 Pro (Ryzen AI Max+ 395 / gfx1151 / Strix Halo). In one unattended, idempotent run, `ry-install.fish` renders 18 [Managed Files](#managed-files), installs and removes `pacman` packages, masks and enables systemd units, and rewrites the fstab; `--install-file <path>` re-deploys one managed file. Verification ships separately as [ry-verify](https://github.com/ryanmusante/ry-verify).
 
@@ -25,7 +25,7 @@ A run that reaches Preflight closes with the Totals line and a verdict: `PASS` o
 |---|---|
 | OS | CachyOS (Arch-based), systemd 250 or newer, systemd-boot with BLS entries, the ESP mounted at `/boot` (no XBOOTLDR) |
 | Shell | fish 3.6 or newer, with its default `regex-easyesc` feature on |
-| Hardware | CPU matching `Ryzen AI Max` — bypass via [Environment Overrides](#environment-overrides) |
+| Hardware | CPU matching `Ryzen AI Max` — on any other CPU the run exits `3` unless overridden via [Environment Overrides](#environment-overrides) |
 | BIOS | flat 85 W ceiling, `TjMax = 90 °C` — see [BIOS](#bios) |
 | Privileges | normal user with sudo rights; `sudo -v` cached before the run and re-armed every 30 s until the run exits — when it is not cached, the run prompts if stdin and stderr are both a TTY, and exits `3` otherwise, if the prompt fails, if no credential ends up cached (`timestamp_timeout=0`), or if the credential is tied to the parent process (`timestamp_type=ppid`); an `--install-file` of a user file needs no sudo |
 | Tools | GNU coreutils, `findmnt`, `awk`, `grep`, `find`, `cmp`, `curl`, `getent`, `pacman`, `mkinitcpio`, `sdboot-manage`, `bootctl`, `systemctl` |
@@ -113,7 +113,7 @@ Files are listed in deploy order. System files land `0644` and user files `0600`
    5. enable — a unit not installed, or one that enables but fails to start, is a `WARN`; `NetworkManager.service` keeps its package preset and is started when it is not running
    6. regulatory domain
 5. **Boot** — `mkinitcpio -P`, `sdboot-manage gen`, `bootctl --graceful update`, boot sanity: non-empty kernel and initramfs images, and every `linux` entry's kernel and `initrd` present as non-empty files inside `$BOOT`.
-6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`, as does a NetworkManager restart deferred because Wi-Fi carries the default route, or an `--install-file` systemd-resolved, NetworkManager, or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus; the next full run applies them unless a reboot already has, and defers that restart again while Wi-Fi still carries the route.
+6. **Finalize** — user `daemon-reload` + PowerDevil re-apply, WirePlumber restart, `paccache -rk2`/`-ruk0`, NetworkManager restart. A run that stops before Finalize records the restarts it owes in `~/ry-install/pending-apply`; the file also records a NetworkManager restart deferred because Wi-Fi carries the default route, and an `--install-file` systemd-resolved, NetworkManager, or WirePlumber restart or PowerDevil re-apply that fails or finds no user bus. The next full run applies them unless a reboot already has, and defers the NetworkManager restart again while Wi-Fi still carries the route.
 
 ## Safety and Reliability
 
@@ -249,7 +249,7 @@ The drop-in ships at priority `95`, after the vendor `70-cachyos-settings.conf`.
 
 ### Bluetooth Audio
 
-- `WP_BLUEZ_ROLES` leaves out HFP and HSP, so a Bluetooth speaker's microphone is unavailable. To take calls through it, add `hfp_hf hfp_ag` in both scripts, raise the `WP_BLUEZ_ROLES:4` tripwire to `6` in each `_ir_validate_counts`, then `--install-file` the drop-in; `wpctl settings --save bluetooth.autoswitch-to-headset-profile false` then keeps A2DP until you pick the headset profile for a call.
+- `WP_BLUEZ_ROLES` leaves out HFP and HSP, so a Bluetooth speaker's microphone is unavailable. To take calls through it, add `hfp_hf hfp_ag` in both scripts, raise the `WP_BLUEZ_ROLES:4` tripwire to `6` in each `_ir_validate_counts`, then `--install-file` the drop-in; `wpctl settings --save bluetooth.autoswitch-to-headset-profile false` keeps A2DP until you pick the headset profile for a call.
 - LE Audio needs `Experimental = true` and `KernelExperimental = 6fbaf188-05e0-496a-9885-d6ddfdb4e03e` (ISO socket) under `[General]` in `/etc/bluetooth/main.conf`; the profile's `main.conf` sets neither, so the `bap_*` roles stay idle and audio plays over A2DP.
 
 ### Kernel Parameter Notes
@@ -284,7 +284,7 @@ Multi-thread gains flatten past ~85 W. Under `Advanced → AMD CBS → SMU Commo
 There is no automated uninstaller. Use [Managed Files](#managed-files) as the rollback reference.
 
 1. **Unmask units** — `sudo systemctl unmask` all 11, listed in [Units](#units). Unmask the Avahi pair to restore mDNS.
-2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 3 user files, then `systemctl --user restart wireplumber.service`; step 3 reverts the 4 boot files.
+2. **Remove configs** — `sudo systemctl disable --now nftables` first, or its unit fails once the ruleset is gone. Then `sudo rm` the 11 system files and `rm` the 3 user files, and run `systemctl --user restart wireplumber.service`; step 3 reverts the 4 boot files.
 3. **Revert boot files and fstab** — restore `/boot/loader/loader.conf`, `/etc/kernel/cmdline`, `/etc/sdboot-manage.conf`, `/etc/mkinitcpio.conf`, and `/etc/fstab` from their matching `~/ry-install/backups/*.ry.bak` copies where present, then delete the backups; older deployments keep the copies beside each file.
 4. **Reverse packages** — optional: `sudo pacman -Syu --needed` the Remove list, `sudo pacman -Rns` the Install list except `pipewire-jack`, which `ffmpeg` needs as its JACK provider, and keep the Vulkan drivers; all three listed in [Packages](#packages).
 5. **Rebuild from the reverted files, then reboot** — `sudo mkinitcpio -P && sudo sdboot-manage gen && sudo bootctl --graceful update`, then `sudo systemctl reboot`.

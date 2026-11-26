@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.302.0 (2026-11-21) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.303.0 (2026-11-25) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.302.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.303.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -2553,7 +2553,7 @@ function _configure_services_resolved_restart --description "Restart systemd-res
         _phase_record "Services: resolved restart" $_r "$_why"; return 0
     end
     if not contains -- /etc/systemd/resolved.conf.d/99-cachyos-resolved.conf $_RY_DEPLOY_CHANGED_DSTS (_pending_apply_load) # unchanged and none owed: no DNS blip
-        _log "RESOLVED_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run, no restart owed"
+        _log "RESOLVED_RESTART_SKIP_UNCHANGED: drop-in not changed this run, no restart owed"
         _phase_record "Services: resolved restart" SKIP "drop-in unchanged (no restart pending)"; return 0
     end
     if _run sudo -n systemctl restart -- systemd-resolved.service
@@ -2908,10 +2908,10 @@ function _configure_services_enable --description "Batch-enable system units (pe
     return $_ret
 end
 function _apply_wireless_regdom --description "Apply the wireless regulatory domain (\$COUNTRY) at runtime"
-    set -g _RY_REGDOM_RESULT DEFER; set -g _RY_REGDOM_EVIDENCE ""
+    set -g _RY_REGDOM_RESULT WARN; set -g _RY_REGDOM_EVIDENCE ""
     if not command -q iw
-        _info "  Wireless regulatory domain: iw(8) absent — $COUNTRY applies via /etc/iw-regdomain (cachyos-iw-set-regdomain)"
-        set -g _RY_REGDOM_EVIDENCE "iw(8) absent — applies via /etc/iw-regdomain"; return 0
+        _warn "  Wireless regulatory domain: iw(8) absent — $COUNTRY not applied until iw is installed (cachyos-iw-set-regdomain needs it)"
+        set -g _RY_REGDOM_EVIDENCE "iw(8) absent — not applied (install iw)"; return 0
     end
     _info "  Wireless regulatory domain → $COUNTRY"
     if _run sudo -n iw reg set "$COUNTRY"
@@ -3259,7 +3259,7 @@ end
 function _if_nm_restart --description "Restart NetworkManager so the deployed wifi.backend/powersave drop-in applies"
     if test "$_RY_PROFILE_USES_WIFI_BACKEND" = false; _info "NetworkManager not managed — skipping the restart"; _phase_record "Finalize: NetworkManager restart" SKIP "NetworkManager backend not active"; return 0; end
     if not contains -- /etc/NetworkManager/conf.d/99-cachyos-nm.conf $argv # unchanged bytes, none owed: no reconnect blip on idempotent re-runs
-        _log "NM_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run, no restart owed"
+        _log "NM_RESTART_SKIP_UNCHANGED: drop-in not changed this run, no restart owed"
         _phase_record "Finalize: NetworkManager restart" SKIP "drop-in unchanged (no restart pending)"; return 0
     end
     if not command -q NetworkManager
@@ -3285,7 +3285,7 @@ function _if_nm_restart --description "Restart NetworkManager so the deployed wi
 end
 function _if_wireplumber_restart --description "Try-restart WirePlumber so a changed or owed bluez5.roles drop-in applies"
     if not contains -- "$HOME/.config/wireplumber/wireplumber.conf.d/51-ry-bluez-roles.conf" $argv # unchanged bytes, none owed: no audio blip
-        _log "WIREPLUMBER_RESTART_SKIP_UNCHANGED: drop-in bytes identical this run, no restart owed"
+        _log "WIREPLUMBER_RESTART_SKIP_UNCHANGED: drop-in not changed this run, no restart owed"
         _phase_record "Finalize: WirePlumber restart" SKIP "bluez5.roles unchanged (no restart pending)"; return 0
     end
     if not _has_user_bus_active
@@ -3767,9 +3767,8 @@ function _post_regdom --argument-names target --description "Post-hook: apply wi
         case PASS
             _ok "Wireless regulatory domain $COUNTRY applied (iw reg set)"; _log "POST_REGDOM_APPLY_OK: target=$target"
         case WARN
-            set -l _key POST_REGDOM_APPLY_FAIL; string match -q -- 'sudo cache lapsed*' "$_RY_REGDOM_EVIDENCE"; and set _key POST_REGDOM_APPLY_LAPSE; _log "$_key: target=$target"
-        case DEFER
-            _log "POST_REGDOM_SKIP_NO_IW: target=$target"
+            set -l _key POST_REGDOM_APPLY_FAIL; string match -q -- 'sudo cache lapsed*' "$_RY_REGDOM_EVIDENCE"; and set _key POST_REGDOM_APPLY_LAPSE
+            string match -q -- 'iw(8) absent*' "$_RY_REGDOM_EVIDENCE"; and set _key POST_REGDOM_SKIP_NO_IW; _log "$_key: target=$target"
     end
     return 0
 end

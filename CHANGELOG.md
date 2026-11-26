@@ -3,13 +3,15 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.302.0
+7.303.0
 -------
 
-  - finalize: a failed or refused NM restart skips the 3 s settle sleep
+  - services: with iw(8) absent the regulatory domain WARNs as not applied
+  - install-file: with iw(8) absent the /etc/iw-regdomain post-hook WARNs
+  - logging: restart skips no longer claim identical bytes on a failed deploy
 
 
-7.260.0 - 7.301.0
+7.260.0 - 7.302.0
 -----------------
 
   - configuration: 7.260.0 an unreadable boot file FAILs and is restored
@@ -32,11 +34,12 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     refused revert, and a sanity FAIL names the lapse
   - finalize: 7.260.0 a refused NM restart or cache trim reads not run;
     7.267.0 a refused -ruk0 after -rk2 reads cut short
+  - finalize: 7.302.0 a failed or refused NM restart skips the 3 s settle wait
   - install-file: 7.260.0 boot gates refuse XBOOTLDR and an ESP not at /boot
   - install-file: 7.267.0 a refused cascade step, restart or udev call,
     7.270.0 or sysctl, nft -c or verify, reads not run
-  - logging: 7.265.0 every run logs KERNEL_RELEASE; 7.267.0 - 7.270.0 refused
-    steps log _LAPSE
+  - logging: 7.265.0 every run logs KERNEL_RELEASE;
+    7.267.0 - 7.270.0 refused steps log _LAPSE
   - consistency: 7.264.0 messages read user bus, re-deploy and pidfile;
     7.265.0 --help names the 7200 s floor
   - consistency: 7.273.0 - 7.275.0 messages drop sentence periods and
@@ -71,7 +74,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: 7.256.0 the bluez5.roles drop-in try-restarts WirePlumber,
     owed when that fails; 7.258.0 a refused udevadm verify is no verdict
   - logging: 7.257.0 a failed restart, daemon-reload, cache trim or indexer
-    run logs a _FAIL key; 7.258.0 new MASK_*FAIL and ENABLE_*FAIL keys
+    run logs a `_FAIL` key; 7.258.0 new `MASK_*FAIL` and `ENABLE_*FAIL` keys
   - summary: 7.257.0 a -Syu that changed packages adds a manual step to review
     the news; 7.258.0 a failed boot step gives its rc
 
@@ -91,8 +94,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     bytes; -h or -v ending in a newline exits 2
   - preflight: 7.254.0 a relative HOME, 7.255.0 or one with a control
     character, takes the passwd entry; such a passwd entry exits 3
-  - preflight: 7.254.0 a value ending in a newline is refused; a TLS failure
-    names the clock or a TLS proxy
+  - preflight: 7.254.0 an embedded value ending in a newline is refused;
+    a TLS failure names the clock or a TLS proxy
   - preflight: 7.255.0 uncached sudo with no TTY prints one ERR
   - lock: 7.254.0 the lock dir drops setgid; 7.254.0 - 7.255.0 releasing
     strands no .claim, and a holder releasing mid-check no longer exits 5
@@ -100,8 +103,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     the original carries; a lapsed mask retry FAILs
   - services: 7.254.0 - 7.255.0 the enable row WARNs for a unit not installed;
     mask --now stops a masked unit still activating
-  - boot: 7.254.0 the rebuild step prints bootctl --graceful update; 7.255.0
-    sanity lists entries as systemd-boot does
+  - boot: 7.254.0 the rebuild step prints bootctl --graceful update;
+    7.255.0 sanity lists entries as systemd-boot does
   - install-file: 7.254.0 a cpupower deploy without cpupower.service skips the
     restart; an nft -c or udevadm verify that could not run is no verdict
   - install-file: 7.255.0 a HOME under /etc or /boot no longer reads user
@@ -135,8 +138,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     early exit's last step, 7.251.0 or before the main handler, keeps its code
   - signals: 7.251.0 - 7.252.0 a signal during a pacman transaction, PKGS_DEL
     removal, failure report, revert or restore prints DO NOT REBOOT
-  - preflight: 7.247.0 MODULES and HOOKS tokens are charset-checked; 7.252.0
-    an empty or non-directory HOME names the value
+  - preflight: 7.247.0 MODULES and HOOKS tokens are charset-checked;
+    7.252.0 an empty or non-directory HOME names the value
   - backup: 7.250.0 the first .ry.bak copy creates ~/ry-install/backups
   - services: 7.250.0 a root-only resolved drop-in no longer skips the restart
   - services: 7.251.0 a lapse-blocked owed resolved restart reads WARN;
@@ -156,8 +159,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
 7.235.0 - 7.245.0
 -----------------
 
-  - configuration: 7.240.0 an nft -c timeout reads as a timeout, 7.245.0 exit
-    124 or 137 as timed out or killed
+  - configuration: 7.240.0 an nft -c timeout reads as a timeout,
+    7.245.0 exit 124 or 137 as timed out or killed
   - configuration: 7.243.0 an nft -c a lapsed sudo cannot run names the lapse;
     a mode drift chmod cannot repair warns
   - packages: 7.235.0 a PKGS_ADD member in conflict sits out -Syu and installs
@@ -183,8 +186,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - services: 7.245.0 a masked unit still running is masked with --now; a
     resolved restart owed by an interrupted run stays owed
   - boot: 7.243.0 sanity checks each linux entry's kernel and initrd lines
-  - finalize: 7.243.0 an NM restart deferred over Wi-Fi stays owed; 7.245.0 a
-    pending-apply marker from an earlier boot is dropped
+  - finalize: 7.243.0 an NM restart deferred over Wi-Fi stays owed;
+    7.245.0 a pending-apply marker from an earlier boot is dropped
   - install-file: 7.241.0 an nft -c timeout reads as a timeout; 7.243.0 nft -c
     and udevadm verify failures say how the file applies
   - install-file: 7.243.0 the DO NOT REBOOT banner cites exit 4 and says to
@@ -217,8 +220,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - packages: 7.234.0 a failed pactree probe reads as held
   - guard: 7.234.0 a sourced or piped run is refused under any locale
   - signals: 7.234.0 a startup SIGINT exits 130, not 0; QUIT is unregistered
-  - cli: 7.218.0 a repeated --install-file exits 2; 7.233.0 --h
-    through --versio work before the root guard
+  - cli: 7.218.0 a repeated --install-file exits 2;
+    7.233.0 --h through --versio work before the root guard
   - cli: 7.234.0 -h and -v exit 1 on a full stdout (closed too, under fish 3)
   - preflight: 7.219.0 MODULES are checked against each installed kernel;
     7.224.0 a locked pacman database stops the run before any deploy
@@ -250,8 +253,8 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     7.204.0 add nowatchdog
   - perf: 7.204.0 governor performance -> powersave; 7.211.0 performance again
   - network: 7.200.0 disable NetworkManager connectivity checking
-  - env: 7.195.0 GSK_RENDERER ngl -> gl, drop PROTON_FSR4_INDICATOR=1; 7.212.1
-    add RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
+  - env: 7.195.0 GSK_RENDERER ngl -> gl, drop PROTON_FSR4_INDICATOR=1;
+    7.212.1 add RADV_PERFTEST=nggc and MANGOHUD_DLSYM=1
   - sysctl: 7.195.0 add vm.watermark_scale_factor=125
   - configuration: 7.195.0 MangoHud cpu_stats on, cpu_temp off; 7.203.0 a
     header on all but /etc/kernel/cmdline, nftables drops its ports invite
@@ -279,21 +282,21 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     amdxdna blacklist; 7.164.0 drop amd_iommu
   - network: 7.163.0 autoconnect-retries-default=0
   - dns: 7.148.0 drop pinned upstreams, DNSOverTLS= and DNSSEC=; link DNS wins
-  - env: 7.154.0 PROTON_FSR4_UPGRADE -> FSR4_WATERMARK; 7.156.0 drop
-    PROTON_ENABLE_WAYLAND=1; 7.163.0 add GSK_RENDERER=ngl
+  - env: 7.154.0 PROTON_FSR4_UPGRADE -> FSR4_WATERMARK;
+    7.156.0 drop PROTON_ENABLE_WAYLAND=1; 7.163.0 add GSK_RENDERER=ngl
   - env: 7.181.0 FSR4_WATERMARK -> PROTON_FSR4_INDICATOR=1
-  - sysctl: 7.157.0 drop both net.core.netdev_budget keys; 7.171.0 drop
-    vm.swappiness=150
+  - sysctl: 7.157.0 drop both net.core.netdev_budget keys;
+    7.171.0 drop vm.swappiness=150
   - configuration: 7.159.0 ICMPv6 base accept in nftables
   - packages: 7.173.0 add cachyos-benchmarker
   - preflight: 7.185.1 an NM_WIFI_POWERSAVE outside 0-3 exits 3
-  - backup: 7.174.0 .ry.bak moves to ~/ry-install/backups; 7.176.0 drop
-    .ry.orig
-  - fstab: 7.182.1 parity probe never ran
+  - backup: 7.174.0 .ry.bak moves to ~/ry-install/backups;
+    7.176.0 drop .ry.orig
+  - fstab: 7.182.1 fix a parity probe that never ran
   - boot: 7.140.0 drop -T0; 7.158.0 COMPRESSION_OPTIONS -1 -> -3,
     fsck.mode=force -> auto
   - install: 7.171.0 chmod on mode drift, bytes unchanged
-  - install-file: 7.177.3 -h and -v were swallowed after --install-file
+  - install-file: 7.177.3 fix -h and -v swallowed after --install-file
   - split: 7.177.0 move verify and check to ry-verify.fish
 
 
@@ -304,19 +307,19 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     kernel.nmi_watchdog=0
   - perf: 7.130.0 - 7.131.1 governor and EPP performance, GPU DPM level high
   - dns: 7.123.0 - 7.129.0 pin upstreams in resolved and NM global-dns
-  - env: 7.123.0 - 7.129.0 FSR4_UPGRADE -> PROTON_FSR4_UPGRADE; drop
-    VKD3D_CONFIG
+  - env: 7.123.0 - 7.129.0 FSR4_UPGRADE -> PROTON_FSR4_UPGRADE;
+    drop VKD3D_CONFIG
   - configuration: 7.100.0 - 7.107.3 17 configs deployed atomically;
     7.137.0 - 7.138.0 drop the dormant RY_REMOTE_PLAY_PORTS nftables gate
-  - lock: 7.108.0 - 7.117.0 dead-PID reclaim only, live or ambiguous pidfiles
-    fail closed
+  - lock: 7.108.0 - 7.117.0 dead-PID reclaim only, live or ambiguous
+    pidfiles fail closed
   - services: 7.118.0 - 7.122.0 mask ufw instead of removing; the
     nftables-first gate withholds ufw.service
   - boot: 7.100.0 - 7.107.3 boot failures exit 4, skip finalization
   - boot: 7.108.0 - 7.117.0 mkinitcpio.conf snapshot and byte-exact revert;
     fstab atomic replace behind parity, size and findmnt gates
-  - install: 7.135.0 - 7.136.1 fix .ry.orig preserve dead under an if-scoped
-    set -l
+  - install: 7.135.0 - 7.136.1 fix .ry.orig preserve dead under an
+    if-scoped set -l
   - install-file: 7.108.0 - 7.117.0 a post-hook dispatch table
   - summary: 7.132.0 - 7.134.0 abort path's phase-3 row took the normal name
 

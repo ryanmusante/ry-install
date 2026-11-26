@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
-# ry-install v7.303.0 (2026-11-25) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
+# ry-install v7.304.0 (2026-11-26) — CachyOS config manager for the Beelink GTR9 Pro (gfx1151)
 if begin; set -lx LC_ALL C; status filename | string match -qr -- '^(-|Standard input|/dev/(stdin|fd/0)|/proc/self/fd/0)$'; or status stack-trace | string match -q -- '*from sourcing*'; end; echo "[ERR] ry-install: must be run as a file, not sourced or piped (use ./ry-install.fish)" >&2; return 1; end
 
 # ── HEADER: VERSION + EXIT CODES + PROFILE CONSTANTS ──
-set -g VERSION "7.303.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
+set -g VERSION "7.304.0"; set -g EXIT_OK 0; set -g EXIT_FAIL 1; set -g EXIT_USAGE 2; set -g EXIT_PREFLIGHT 3; set -g EXIT_BOOT_CRIT 4; set -g EXIT_LOCK 5
 set -g EXIT_GEN_NOFN 11; set -g EXIT_GEN_NOUUID 12; set -g EXIT_GEN_SYSCTL 13; set -g EXIT_GEN_ENVD 14 # internal gen-fail sentinels (fn return only)
 set -g EXIT_AS_MISUSE 250; set -g EXIT_RUN_TMPFAIL 251; set -g EXIT_RUN_MISUSE 255 # internal sentinels (fn return only)
 status job-control none; set -g IFS \n\ \t; set -g fish_read_limit 1073741824 # config.fish job control, IFS or read limit would steer this run
@@ -1488,7 +1488,7 @@ function _ry_check_time_sync --description "Verify NTP sync (warn-only; no remed
     set -l _synced (command timedatectl show -p NTPSynchronized --value 2>/dev/null | string trim --)
     if test "$_synced" = yes; _ok "  Time sync: NTP synchronized"; _log "TIME_SYNC_CHECK_OK"; return 0; end
     if test -z "$_synced"; _warn "  Time sync: timedatectl query failed (no NTPSynchronized value) — cannot verify (pacman signature checks may fail on a skewed clock)"; _log "TIME_SYNC_CHECK_SKIP: timedatectl show -p NTPSynchronized returned nothing"; return 1; end
-    _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks may fail; enable an NTP client manually (e.g. sudo timedatectl set-ntp true)"
+    _warn "  Time sync: clock NOT NTP-synchronized (NTPSynchronized=$_synced) — pacman signature checks may fail; enable an NTP client manually (sudo timedatectl set-ntp true)"
     _log "TIME_SYNC_CHECK_UNSYNCED: NTPSynchronized=$_synced"; return 1
 end
 function _check_avail --argument-names path divisor unit crit warn --description "Compare available bytes at path against crit/warn thresholds (in scaled units)"
@@ -1781,7 +1781,7 @@ function _awf_render_to_tmp --argument-names dst tmpfile use_sudo --description 
             case $EXIT_GEN_NOFN
                 _err "Not a managed destination: $dst"
             case $EXIT_GEN_NOUUID
-                _err "Content generator missing prerequisite global (e.g. _ROOT_UUID): $dst"
+                _err "Content generator missing prerequisite global _ROOT_UUID: $dst"
             case $EXIT_GEN_SYSCTL
                 if set -q _RY_SYSCTL_BAD_ENTRIES; and test (count $_RY_SYSCTL_BAD_ENTRIES) -gt 0
                     _err "Content generator assertion failed (output count mismatch): $dst — malformed entries: "(string join ', ' -- $_RY_SYSCTL_BAD_ENTRIES)

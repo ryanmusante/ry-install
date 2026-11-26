@@ -3,15 +3,13 @@ Changes for ry-install
 
 Newest first. Versioning is MAJOR.MINOR.PATCH.
 
-7.303.0
+7.304.0
 -------
 
-  - services: with iw(8) absent the regulatory domain WARNs as not applied
-  - install-file: with iw(8) absent the /etc/iw-regdomain post-hook WARNs
-  - logging: restart skips no longer claim identical bytes on a failed deploy
+  - consistency: the time-sync WARN and root-UUID generator error drop e.g.
 
 
-7.260.0 - 7.302.0
+7.260.0 - 7.303.0
 -----------------
 
   - configuration: 7.260.0 an unreadable boot file FAILs and is restored
@@ -29,6 +27,7 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
     failed; 7.267.0 - 7.271.0 a refused step reads not run
   - services: 7.272.0 after a refused -D re-mark or enable batch, no PKGS_DEL
     removal or preset start is tried
+  - services: 7.303.0 without iw(8) the regulatory domain WARNs as not applied
   - boot: 7.260.0 sanity fails a linux entry with no initrd line
   - boot: 7.267.0 a refused rebuild step reads not run; 7.271.0 so does a
     refused revert, and a sanity FAIL names the lapse
@@ -38,8 +37,10 @@ Newest first. Versioning is MAJOR.MINOR.PATCH.
   - install-file: 7.260.0 boot gates refuse XBOOTLDR and an ESP not at /boot
   - install-file: 7.267.0 a refused cascade step, restart or udev call,
     7.270.0 or sysctl, nft -c or verify, reads not run
+  - install-file: 7.303.0 without iw(8) the /etc/iw-regdomain post-hook WARNs
   - logging: 7.265.0 every run logs KERNEL_RELEASE;
     7.267.0 - 7.270.0 refused steps log _LAPSE
+  - logging: 7.303.0 restart skips log not changed, not identical bytes
   - consistency: 7.264.0 messages read user bus, re-deploy and pidfile;
     7.265.0 --help names the 7200 s floor
   - consistency: 7.273.0 - 7.275.0 messages drop sentence periods and
